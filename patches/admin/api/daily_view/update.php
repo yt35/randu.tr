@@ -147,6 +147,7 @@ try {
     $serviceFinalData = [];
     $totalDuration = 0;
     $calculatedTotal = 0;
+    $rangeSid = null;
     foreach ($serviceIds as $sid) {
         $sid = (int)$sid;
         $svcVariants = $variantData[(string)$sid] ?? [];
@@ -170,6 +171,9 @@ try {
         $q = $svcQty[$sid] ?? 1;
         $fp *= $q;
         $fd *= $q;
+        if (($svcMap[$sid]['pricing_type'] ?? '') === 'range') {
+            $rangeSid = $sid;
+        }
         $serviceFinalData[$sid] = ['variant_ids' => $variantIds, 'fp' => $fp, 'fd' => $fd, 'q' => $q];
         $totalDuration += $fd;
         $calculatedTotal += $fp;
@@ -178,6 +182,11 @@ try {
     
     if ($totalPrice <= 0) {
         $totalPrice = $calculatedTotal;
+    }
+    // Tek (veya son) aralıklı hizmete toplam farkı yaz — kasa / final_price senkron
+    if ($rangeSid !== null && abs($calculatedTotal - $totalPrice) > 0.009 && isset($serviceFinalData[$rangeSid])) {
+        $serviceFinalData[$rangeSid]['fp'] = max(0, (float)$serviceFinalData[$rangeSid]['fp'] + ($totalPrice - $calculatedTotal));
+        $calculatedTotal = $totalPrice;
     }
     
     // Kısmi ödeme kontrol

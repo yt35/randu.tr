@@ -1208,14 +1208,28 @@ async function setPaymentMethodAndSubmit(paymentMethod, paidAmount = null) {
     paymentButtons.forEach(btn => btn.disabled = true);
     
     const aptCompleteRangePrices = {};
+    const aptRangeChecked = [];
     serviceListContainer.querySelectorAll('.complete-service-checkbox:checked').forEach(cb => {
         if (cb.dataset.isRange === '1') {
             const rangeInput = serviceListContainer.querySelector(`.complete-range-actual-price[data-service-id="${cb.dataset.id}"]`);
             if (rangeInput) {
                 aptCompleteRangePrices[cb.dataset.id] = parseFloat(rangeInput.value) || 0;
+                aptRangeChecked.push(cb.dataset.id);
             }
         }
     });
+    const aptCompleteTotal = parseFloat(document.getElementById('final_price').value);
+    if (aptRangeChecked.length === 1 && Number.isFinite(aptCompleteTotal)) {
+        let fixedSum = 0;
+        serviceListContainer.querySelectorAll('.complete-service-checkbox:checked').forEach(cb => {
+            if (cb.dataset.isRange === '1') return;
+            fixedSum += parseFloat(cb.dataset.basePrice || cb.value || 0);
+        });
+        const onlySid = aptRangeChecked[0];
+        aptCompleteRangePrices[onlySid] = Math.max(0, aptCompleteTotal - fixedSum);
+        const syncInput = serviceListContainer.querySelector(`.complete-range-actual-price[data-service-id="${onlySid}"]`);
+        if (syncInput) syncInput.value = aptCompleteRangePrices[onlySid];
+    }
 
     try {
         const result = await apiRequest('complete.php', 'POST', {
@@ -1408,6 +1422,28 @@ function submitAppointmentForm() {
             }
         }
     });
+
+    // Aralıklı fiyatlar + toplam
+    const rangePrices = {};
+    let computedTotal = 0;
+    checkedBoxes.forEach(cb => {
+        const wrapper = cb.closest('.service-item-wrapper');
+        const sid = cb.dataset.serviceId || cb.value;
+        if (cb.dataset.pricingType === 'range' || cb.dataset.isRange === '1') {
+            const rangeInput = wrapper?.querySelector('.edit-range-actual-price, .range-actual-price');
+            const rp = rangeInput ? (parseFloat(rangeInput.value) || 0) : parseFloat(cb.dataset.price || 0);
+            rangePrices[sid] = rp;
+            computedTotal += rp;
+        } else if (cb.dataset.isVariant === '1') {
+            let p = parseFloat(cb.dataset.price || 0);
+            wrapper?.querySelectorAll('.variant-input:checked').forEach(v => {
+                p += parseFloat(v.dataset.extraPrice || 0);
+            });
+            computedTotal += p;
+        } else {
+            computedTotal += parseFloat(cb.dataset.price || 0);
+        }
+    });
     
     // Form verilerini JSON'a çevir
     const data = {
@@ -1419,7 +1455,9 @@ function submitAppointmentForm() {
         appointment_time: formData.get('appointment_time'),
         status: formData.get('status'),
         notes: formData.get('notes') || '',
-        variant_data: variantData
+        variant_data: variantData,
+        range_prices: rangePrices,
+        total_price: computedTotal
     };
     
     // Tekrarlayan randevu verileri

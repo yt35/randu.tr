@@ -538,13 +538,28 @@ function updateDateNavigation(prevDate, nextDate) {
     if (dateInput) dateInput.value = dailyViewState.selectedDate;
 }
 
+/** Aktif bekleme listesi kayıtlarını saate göre grupla (HH:MM) */
+function getWaitlistByPreferredTime() {
+    const map = {};
+    (dailyViewState.waitingList || []).forEach(entry => {
+        if (!entry) return;
+        const st = entry.status || 'waiting';
+        if (st !== 'waiting' && st !== 'called') return;
+        const t = String(entry.preferred_time || '').substring(0, 5);
+        if (!t || t.length < 4) return;
+        if (!map[t]) map[t] = [];
+        map[t].push(entry);
+    });
+    return map;
+}
+
 function renderWaitingList() {
     const mainContainer = document.getElementById('waitingListItems');
     const modalContainer = document.getElementById('waitingListItemsModal');
     const mainCountEl = document.getElementById('waitingListCount');
     const modalCountEl = document.getElementById('waitingListCountModal');
     const badgeEl = document.getElementById('waitingListBadge');
-    
+
     const entries = Array.isArray(dailyViewState.waitingList) ? dailyViewState.waitingList : [];
     
     if (mainCountEl) mainCountEl.textContent = String(entries.length);
@@ -563,19 +578,24 @@ function renderWaitingList() {
         const dialPhone = normalizePhoneForDial(entry.customer_phone || '');
 
         const calledIcon = entry.status === 'called' ? '<i class="fas fa-check waiting-called-icon"></i>' : '';
+        const hasPrefTime = !!(entry.preferred_time && String(entry.preferred_time).substring(0, 5).length >= 4);
+        const bBadge = hasPrefTime
+            ? `<span class="waiting-b-badge" title="Bu saat defterde B ile işaretli — bekleme hatırlatması">B</span>`
+            : '';
         return `
             <div class="waiting-item ${calledClass}">
                 <div class="waiting-item-top">
-                    <div class="waiting-customer">${name} ${calledIcon}</div>
+                    <div class="waiting-customer">${bBadge}${name} ${calledIcon}</div>
                     <span class="waiting-chip"><i class="fas fa-phone"></i> ${phone}</span>
                 </div>
                 <div class="waiting-meta">
                     <span class="waiting-chip"><i class="fas fa-user-tie"></i> ${prefEmployee}</span>
-                    <span class="waiting-chip"><i class="fas fa-clock"></i> ${prefTime}</span>
+                    <span class="waiting-chip"><i class="fas fa-clock"></i> ${prefTime}${hasPrefTime ? ' · B' : ''}</span>
                     <span class="waiting-chip"><i class="fas fa-cut"></i> ${services}</span>
                     ${entry.call_when_available == 1 ? '<span class="waiting-chip"><i class="fas fa-bell"></i> Bosluk olursa aranabilir</span>' : ''}
                 </div>
                 ${note ? `<div class="waiting-chip waiting-chip-note">${note}</div>` : ''}
+                ${hasPrefTime ? '<div class="waiting-chip waiting-chip-b-note"><i class="fas fa-info-circle"></i> Defterde bu saatin kartlarında <strong>B</strong> işareti görünür</div>' : ''}
                 <div class="waiting-actions">
                     <button class="btn btn-success" onclick="openWaitlistAsAppointment(${entry.id})"><i class="fas fa-calendar-plus"></i> Randevuya Cevir</button>
                     <button class="btn btn-primary" onclick="markWaitlistCalled(${entry.id})"><i class="fas fa-phone-volume"></i> Arandi</button>
@@ -747,6 +767,8 @@ function renderScheduleGrid() {
     timeHeader.textContent = 'Saat';
     timeColumn.appendChild(timeHeader);
     
+    const waitByTime = getWaitlistByPreferredTime();
+
     dailyViewState.timeSlots.forEach(timeSlot => {
         const timeLabel = document.createElement('div');
         timeLabel.className = 'time-label';
@@ -754,7 +776,14 @@ function renderScheduleGrid() {
             timeLabel.classList.add('off-grid-slot');
             timeLabel.title = 'Standart slot dışında manuel eklenmiş saat';
         }
-        timeLabel.textContent = timeSlot;
+        const waitCount = (waitByTime[timeSlot] || []).length;
+        if (waitCount > 0) {
+            timeLabel.classList.add('has-waitlist');
+            timeLabel.title = `Bekleme listesinde ${waitCount} kişi (${timeSlot})`;
+            timeLabel.innerHTML = `${escapeHtml(timeSlot)}<span class="waitlist-time-badge" title="Bekleme listesi">B${waitCount > 1 ? waitCount : ''}</span>`;
+        } else {
+            timeLabel.textContent = timeSlot;
+        }
         timeColumn.appendChild(timeLabel);
     });
     
@@ -831,9 +860,15 @@ function renderScheduleGrid() {
                 
                 slot.onclick = (e) => handleSlotClick(e, slot);
             } else {
-                // Boş slot
+                // Boş slot — bekleme listesi varsa B hatırlatması
                 slot.classList.add('available');
-                slot.innerHTML = '<div class="slot-add-icon">+</div><div class="slot-add-text">Randevu Ekle</div>';
+                const waitForEmpty = (waitByTime[timeSlot] || []);
+                let emptyHtml = '<div class="slot-add-icon">+</div><div class="slot-add-text">Randevu Ekle</div>';
+                if (waitForEmpty.length > 0) {
+                    const names = waitForEmpty.map(w => w.customer_name || 'Müşteri').join(', ');
+                    emptyHtml = `<div class="waitlist-indicator" title="Bu saatte bekleme listesinde: ${escapeHtml(names)}">B</div>` + emptyHtml;
+                }
+                slot.innerHTML = emptyHtml;
                 slot.onclick = (e) => handleAvailableSlotClick(e, slot);
             }
             
@@ -908,6 +943,14 @@ function createAppointmentItemForSlot(appointment, totalInSlot, index) {
         // Düzenlenmiş randevu göstergesi
         if (appointment.is_edited == 1 && appointment.status === 'completed') {
             content += '<div class="edited-indicator" title="Düzenlenmiş Randevu">D</div>';
+        }
+
+        // Bekleme listesi hatırlatması (tercih edilen saat = bu kartın saati)
+        const aptTimeKey = String(appointment.appointment_time_formatted || appointment.appointment_time || '').substring(0, 5);
+        const waitForSlot = (getWaitlistByPreferredTime()[aptTimeKey] || []);
+        if (waitForSlot.length > 0) {
+            const names = waitForSlot.map(w => w.customer_name || 'Müşteri').join(', ');
+            content += `<div class="waitlist-indicator" title="Bu saatte bekleme listesinde: ${escapeHtml(names)}">B</div>`;
         }
         
         // Birden fazla randevu badge
@@ -3132,14 +3175,38 @@ async function setPaymentMethodAndSubmit(paymentMethod, paidAmount = null, zeroC
     
     // Aralıklı hizmet fiyatlarını gönder
     const completeRangePrices = {};
+    const rangeChecked = [];
     serviceListContainer.querySelectorAll('.service-checkbox:checked').forEach(cb => {
         if (cb.dataset.isRange === '1') {
             const rangeInput = serviceListContainer.querySelector(`.range-actual-price[data-service-id="${cb.dataset.id}"]`);
             if (rangeInput) {
                 completeRangePrices[cb.dataset.id] = parseFloat(rangeInput.value) || 0;
+                rangeChecked.push(cb.dataset.id);
             }
         }
     });
+    // Tek aralıklı hizmette final_price ile range input farkını kapat (kasa senkron)
+    const completeTotalVal = parseFloat(document.getElementById('final_price').value);
+    if (rangeChecked.length === 1 && Number.isFinite(completeTotalVal)) {
+        let fixedSum = 0;
+        serviceListContainer.querySelectorAll('.service-checkbox:checked').forEach(cb => {
+            if (cb.dataset.isRange === '1') return;
+            if (cb.dataset.isVariant === '1') {
+                let p = parseFloat(cb.dataset.basePrice || cb.value || 0);
+                const panel = serviceListContainer.querySelector(`.complete-variant-panel[data-service-id="${cb.dataset.id}"]`);
+                panel?.querySelectorAll('.complete-variant-input:checked').forEach(v => {
+                    p += parseFloat(v.dataset.extraPrice || 0);
+                });
+                fixedSum += p;
+            } else {
+                fixedSum += parseFloat(cb.dataset.basePrice || cb.value || 0);
+            }
+        });
+        const onlySid = rangeChecked[0];
+        completeRangePrices[onlySid] = Math.max(0, completeTotalVal - fixedSum);
+        const syncInput = serviceListContainer.querySelector(`.range-actual-price[data-service-id="${onlySid}"]`);
+        if (syncInput) syncInput.value = completeRangePrices[onlySid];
+    }
 
     try {
         const result = await apiRequest('api/daily_view/complete.php', 'POST', {
@@ -3210,14 +3277,28 @@ async function setEditPaymentMethodAndSubmit(paymentMethod, paidAmount = null) {
     });
     
     const editRangePrices = {};
+    const editRangeChecked = [];
     editServiceListContainer.querySelectorAll('.edit-service-checkbox:checked').forEach(cb => {
         if (cb.dataset.isRange === '1') {
             const rangeInput = editServiceListContainer.querySelector(`.edit-range-actual-price[data-service-id="${cb.dataset.id}"]`);
             if (rangeInput) {
                 editRangePrices[cb.dataset.id] = parseFloat(rangeInput.value) || 0;
+                editRangeChecked.push(cb.dataset.id);
             }
         }
     });
+    const editTotalVal = parseFloat(document.getElementById('edit_final_price').value);
+    if (editRangeChecked.length === 1 && Number.isFinite(editTotalVal)) {
+        let fixedSum = 0;
+        editServiceListContainer.querySelectorAll('.edit-service-checkbox:checked').forEach(cb => {
+            if (cb.dataset.isRange === '1') return;
+            fixedSum += parseFloat(cb.dataset.basePrice || cb.value || 0);
+        });
+        const onlySid = editRangeChecked[0];
+        editRangePrices[onlySid] = Math.max(0, editTotalVal - fixedSum);
+        const syncInput = editServiceListContainer.querySelector(`.edit-range-actual-price[data-service-id="${onlySid}"]`);
+        if (syncInput) syncInput.value = editRangePrices[onlySid];
+    }
 
     try {
         const result = await apiRequest('api/daily_view/update.php', 'POST', {

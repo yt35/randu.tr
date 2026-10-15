@@ -766,8 +766,44 @@ function editCustomer(id) {
 }
 
 // ==========================================
-// Müşteri Geçmişi Modal
+// Müşteri Geçmişi Modal (filtre + ödeme renkleri)
 // ==========================================
+var _customerHistoryState = null;
+
+function historyPaymentStyle(apt) {
+    var method = apt.payment_method || '';
+    var paidAmount = apt.paid_amount != null ? parseFloat(apt.paid_amount) : null;
+    var total = parseFloat(apt.total_price || 0);
+    var isPartial = paidAmount !== null && paidAmount > 0 && paidAmount < total;
+    var isUnpaid = method === 'not_paid' || apt.payment_status === 'pending' || isPartial;
+
+    if (isPartial) {
+        return { key: 'partial', label: 'Kısmi', bg: '#fee2e2', color: '#b91c1c', border: '#fca5a5' };
+    }
+    if (method === 'not_paid' || (apt.status === 'completed' && apt.payment_status === 'pending' && !method)) {
+        return { key: 'not_paid', label: 'Alınmadı', bg: '#dc2626', color: '#ffffff', border: '#991b1b' };
+    }
+    if (method === 'cash') {
+        return { key: 'cash', label: 'Nakit', bg: '#fef08a', color: '#713f12', border: '#facc15' };
+    }
+    if (method === 'bank_transfer') {
+        return { key: 'bank_transfer', label: 'Havale/EFT', bg: '#fbcfe8', color: '#831843', border: '#f9a8d4' };
+    }
+    if (method === 'credit_card') {
+        return { key: 'credit_card', label: 'Kredi Kartı', bg: '#dbeafe', color: '#1e3a8a', border: '#93c5fd' };
+    }
+    if (method === 'mixed') {
+        return { key: 'mixed', label: 'Karışık', bg: '#e0e7ff', color: '#3730a3', border: '#a5b4fc' };
+    }
+    return { key: method || 'other', label: apt.payment_method_label || '—', bg: '#f1f5f9', color: '#475569', border: '#cbd5e1' };
+}
+
+function historyPaymentFilterKey(apt) {
+    var style = historyPaymentStyle(apt);
+    if (style.key === 'partial' || style.key === 'not_paid') return 'not_paid';
+    return style.key;
+}
+
 async function viewCustomerHistory(id) {
     logDebug('viewCustomerHistory called with id: ' + id);
     var customer = null;
@@ -778,7 +814,6 @@ async function viewCustomerHistory(id) {
         }
     }
     if (!customer) {
-        logDebug('ERROR: Customer not found');
         showNotification('Müşteri bulunamadı', 'error');
         return;
     }
@@ -794,13 +829,14 @@ async function viewCustomerHistory(id) {
     var labelColor = isDark ? '#94a3b8' : '#6b7280';
     var headerGradient = isDark ? 'linear-gradient(135deg, #1e40af 0%, #1e3a8a 100%)' : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)';
     var rowBorder = isDark ? '#475569' : '#e5e7eb';
+    var inputBg = isDark ? '#1e293b' : '#ffffff';
 
     var modal = document.createElement('div');
     modal.id = 'dynamicModal';
     modal.className = 'dynamic-modal-overlay';
     modal.style.cssText = 'position:fixed; top:0; left:0; width:100%; height:100%; background:rgba(0,0,0,0.75); z-index:999999; display:flex; align-items:center; justify-content:center; padding:1rem; backdrop-filter:blur(8px);';
 
-    modal.innerHTML = '<div class="dynamic-modal-content" style="background:' + bgColor + '; border-radius:16px; width:100%; max-width:720px; border:2px solid ' + borderColor + '; box-shadow:0 12px 40px rgba(0,0,0,0.25); overflow:hidden; max-height:90vh; display:flex; flex-direction:column;">' +
+    modal.innerHTML = '<div class="dynamic-modal-content" style="background:' + bgColor + '; border-radius:16px; width:100%; max-width:820px; border:2px solid ' + borderColor + '; box-shadow:0 12px 40px rgba(0,0,0,0.25); overflow:hidden; max-height:92vh; display:flex; flex-direction:column;">' +
         '<div style="padding:0.875rem 1rem; display:flex; justify-content:space-between; align-items:center; background:' + headerGradient + '; flex-shrink:0;">' +
         '<div style="display:flex; align-items:center; gap:0.5rem;"><i class="fas fa-history" style="font-size:1rem; color:white;"></i>' +
         '<h3 style="margin:0; color:white; font-size:1.05rem; font-weight:700;">Müşteri Geçmişi</h3></div>' +
@@ -815,7 +851,7 @@ async function viewCustomerHistory(id) {
     document.onkeydown = function (e) { if (e.key === 'Escape') closeDynamicModal(); };
 
     try {
-        var result = await getCustomerHistory(id, { limit: 50 });
+        var result = await getCustomerHistory(id, { limit: 100 });
         var body = document.getElementById('customerHistoryBody');
         if (!body) return;
 
@@ -824,73 +860,15 @@ async function viewCustomerHistory(id) {
             return;
         }
 
-        var stats = result.stats || {};
-        var appointments = result.appointments || [];
-        var cust = result.customer || customer;
-
-        var statusColor = {
-            completed: '#10b981', confirmed: '#3b82f6', pending: '#f59e0b',
-            cancelled: '#ef4444', 'no-show': '#94a3b8'
+        _customerHistoryState = {
+            customer: result.customer || customer,
+            stats: result.stats || {},
+            appointments: result.appointments || [],
+            theme: { bgColor: bgColor, textColor: textColor, cardBg: cardBg, labelColor: labelColor, rowBorder: rowBorder, inputBg: inputBg, isDark: isDark },
+            filters: { search: '', payment: '', sort: 'date_desc' }
         };
 
-        var html = '';
-        html += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">' +
-            '<div style="width:44px; height:44px; min-width:44px; border-radius:50%; background:linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); display:flex; align-items:center; justify-content:center; font-size:1.15rem; color:white; font-weight:700;">' +
-            (cust.name ? cust.name.charAt(0).toUpperCase() : '?') + '</div>' +
-            '<div style="flex:1; min-width:0;"><h4 style="margin:0 0 0.2rem 0; font-size:1.05rem; font-weight:700; color:' + textColor + ';">' + escapeHtml(cust.name || customer.name) + '</h4>' +
-            '<span style="color:' + labelColor + '; font-size:0.8rem;"><i class="fas fa-phone" style="color:#10b981;"></i> ' + formatPhoneDisplay(cust.phone || customer.phone) + '</span></div></div>';
-
-        html += '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(140px,1fr)); gap:0.5rem; margin-bottom:1rem;">' +
-            historyStatCard(cardBg, rowBorder, labelColor, '#3b82f6', 'fa-calendar-check', stats.total_appointments || appointments.length || 0, 'Randevu') +
-            historyStatCard(cardBg, rowBorder, labelColor, '#10b981', 'fa-lira-sign', formatCurrency(stats.total_spent || 0).replace('₺', '').trim(), 'Toplam Hesap') +
-            historyStatCard(cardBg, rowBorder, labelColor, '#059669', 'fa-check-circle', formatCurrency(stats.total_paid || 0).replace('₺', '').trim(), 'Ödenen') +
-            historyStatCard(cardBg, rowBorder, labelColor, '#ef4444', 'fa-exclamation-circle', formatCurrency(stats.total_unpaid || 0).replace('₺', '').trim(), 'Bekleyen') +
-            '</div>';
-
-        if (!appointments.length) {
-            html += '<div style="text-align:center; padding:2rem; color:' + labelColor + ';"><i class="fas fa-inbox" style="font-size:2rem; margin-bottom:0.5rem; display:block;"></i>Henüz randevu kaydı yok</div>';
-        } else {
-            html += '<div style="display:flex; flex-direction:column; gap:0.65rem;">';
-            appointments.forEach(function (apt) {
-                var sc = statusColor[apt.status] || '#64748b';
-                var servicesHtml = '';
-                if (apt.services && apt.services.length) {
-                    servicesHtml = apt.services.map(function (s) {
-                        var qty = s.quantity > 1 ? (' x' + s.quantity) : '';
-                        return '<div style="display:flex; justify-content:space-between; gap:0.75rem; font-size:0.8rem; color:' + textColor + ';">' +
-                            '<span>' + escapeHtml(s.name) + qty + '</span>' +
-                            '<span style="font-weight:600; white-space:nowrap;">' + formatCurrency(s.price || 0) + '</span></div>';
-                    }).join('');
-                } else if (apt.service_name) {
-                    servicesHtml = '<div style="font-size:0.8rem; color:' + textColor + ';">' + escapeHtml(apt.service_name) + '</div>';
-                }
-
-                html += '<div style="background:' + cardBg + '; border:1px solid ' + rowBorder + '; border-radius:12px; padding:0.85rem;">' +
-                    '<div style="display:flex; justify-content:space-between; gap:0.75rem; align-items:flex-start; margin-bottom:0.5rem;">' +
-                    '<div><div style="font-weight:700; color:' + textColor + '; font-size:0.95rem;">' +
-                    escapeHtml(apt.appointment_date_formatted || formatDate(apt.appointment_date)) +
-                    (apt.appointment_time_formatted ? (' · ' + escapeHtml(apt.appointment_time_formatted)) : '') +
-                    '</div>' +
-                    (apt.employee_name ? ('<div style="font-size:0.75rem; color:' + labelColor + '; margin-top:0.15rem;"><i class="fas fa-user-tie"></i> ' + escapeHtml(apt.employee_name) + '</div>') : '') +
-                    '</div>' +
-                    '<span style="background:' + sc + '22; color:' + sc + '; font-size:0.7rem; font-weight:700; padding:0.25rem 0.55rem; border-radius:999px; white-space:nowrap;">' +
-                    escapeHtml(apt.status_label || apt.status) + '</span></div>' +
-                    (servicesHtml ? ('<div style="margin:0.45rem 0; padding:0.45rem 0; border-top:1px dashed ' + rowBorder + '; border-bottom:1px dashed ' + rowBorder + ';">' + servicesHtml + '</div>') : '') +
-                    '<div style="display:flex; flex-wrap:wrap; gap:0.75rem; justify-content:space-between; align-items:center; margin-top:0.45rem;">' +
-                    '<div style="font-size:0.78rem; color:' + labelColor + ';">' +
-                    '<i class="fas fa-wallet"></i> ' + escapeHtml(apt.payment_method_label || '-') +
-                    (apt.payment_status ? (' · ' + (apt.payment_status === 'paid' ? 'Ödendi' : 'Bekliyor')) : '') +
-                    (apt.paid_amount != null ? (' · Alınan: ' + formatCurrency(apt.paid_amount)) : '') +
-                    '</div>' +
-                    '<div style="font-weight:800; color:#059669; font-size:1rem;">' + (apt.total_price_formatted || formatCurrency(apt.total_price || 0)) + '</div>' +
-                    '</div>' +
-                    (apt.notes ? ('<div style="margin-top:0.5rem; font-size:0.75rem; color:' + labelColor + ';"><i class="fas fa-sticky-note"></i> ' + escapeHtml(apt.notes) + '</div>') : '') +
-                    '</div>';
-            });
-            html += '</div>';
-        }
-
-        body.innerHTML = html;
+        renderCustomerHistoryContent();
     } catch (err) {
         var bodyErr = document.getElementById('customerHistoryBody');
         if (bodyErr) {
@@ -899,12 +877,186 @@ async function viewCustomerHistory(id) {
     }
 }
 
+function renderCustomerHistoryContent() {
+    var state = _customerHistoryState;
+    if (!state) return;
+    var body = document.getElementById('customerHistoryBody');
+    if (!body) return;
+
+    var t = state.theme;
+    var stats = state.stats;
+    var cust = state.customer;
+    var filters = state.filters;
+
+    var filtered = (state.appointments || []).slice();
+    if (filters.search) {
+        var q = filters.search.toLocaleLowerCase('tr-TR');
+        filtered = filtered.filter(function (apt) {
+            var hay = [
+                apt.service_name || '',
+                apt.employee_name || '',
+                apt.notes || '',
+                apt.payment_method_label || '',
+                apt.status_label || '',
+                (apt.services || []).map(function (s) { return s.name; }).join(' ')
+            ].join(' ').toLocaleLowerCase('tr-TR');
+            return hay.indexOf(q) !== -1;
+        });
+    }
+    if (filters.payment) {
+        filtered = filtered.filter(function (apt) {
+            return historyPaymentFilterKey(apt) === filters.payment;
+        });
+    }
+    if (filters.sort === 'spend_desc') {
+        filtered.sort(function (a, b) { return parseFloat(b.total_price || 0) - parseFloat(a.total_price || 0); });
+    } else if (filters.sort === 'spend_asc') {
+        filtered.sort(function (a, b) { return parseFloat(a.total_price || 0) - parseFloat(b.total_price || 0); });
+    } else if (filters.sort === 'date_asc') {
+        filtered.sort(function (a, b) {
+            var da = (a.appointment_date || '') + ' ' + (a.appointment_time || '');
+            var db = (b.appointment_date || '') + ' ' + (b.appointment_time || '');
+            return da.localeCompare(db);
+        });
+    } else {
+        filtered.sort(function (a, b) {
+            var da = (a.appointment_date || '') + ' ' + (a.appointment_time || '');
+            var db = (b.appointment_date || '') + ' ' + (b.appointment_time || '');
+            return db.localeCompare(da);
+        });
+    }
+
+    var statusColor = {
+        completed: '#10b981', confirmed: '#3b82f6', pending: '#f59e0b',
+        cancelled: '#ef4444', 'no-show': '#94a3b8'
+    };
+
+    if (!document.getElementById('customerHistoryList')) {
+        var shell = '';
+        shell += '<div style="display:flex; align-items:center; gap:0.75rem; margin-bottom:1rem;">' +
+            '<div style="width:48px; height:48px; min-width:48px; border-radius:50%; background:linear-gradient(135deg, #3b82f6 0%, #8b5cf6 100%); display:flex; align-items:center; justify-content:center; font-size:1.2rem; color:white; font-weight:700;">' +
+            (cust.name ? cust.name.charAt(0).toUpperCase() : '?') + '</div>' +
+            '<div style="flex:1; min-width:0;"><h4 style="margin:0 0 0.2rem 0; font-size:1.1rem; font-weight:700; color:' + t.textColor + ';">' + escapeHtml(cust.name || '') + '</h4>' +
+            '<div style="display:flex; flex-wrap:wrap; gap:0.75rem; color:' + t.labelColor + '; font-size:0.8rem;">' +
+            '<span><i class="fas fa-phone" style="color:#10b981;"></i> ' + formatPhoneDisplay(cust.phone || '') + '</span>' +
+            (cust.email ? '<span><i class="fas fa-envelope" style="color:#f59e0b;"></i> ' + escapeHtml(cust.email) + '</span>' : '') +
+            '</div></div></div>';
+
+        shell += '<div style="display:grid; grid-template-columns:repeat(auto-fit,minmax(130px,1fr)); gap:0.5rem; margin-bottom:1rem;">' +
+            historyStatCard(t.cardBg, t.rowBorder, t.labelColor, '#3b82f6', 'fa-calendar-check', stats.total_appointments || state.appointments.length || 0, 'Randevu') +
+            historyStatCard(t.cardBg, t.rowBorder, t.labelColor, '#10b981', 'fa-lira-sign', formatCurrency(stats.total_spent || 0).replace('₺', '').trim(), 'Toplam Hesap') +
+            historyStatCard(t.cardBg, t.rowBorder, t.labelColor, '#059669', 'fa-check-circle', formatCurrency(stats.total_paid || 0).replace('₺', '').trim(), 'Ödenen') +
+            historyStatCard(t.cardBg, t.rowBorder, t.labelColor, '#dc2626', 'fa-exclamation-circle', formatCurrency(stats.total_unpaid || 0).replace('₺', '').trim(), 'Alınmadı') +
+            '</div>';
+
+        shell += '<div style="display:grid; grid-template-columns:1.4fr 1fr 1fr; gap:0.5rem; margin-bottom:0.85rem;">' +
+            '<input id="histFilterSearch" type="text" placeholder="Hizmet, personel, not ara..." value="' + escapeHtml(filters.search) + '" ' +
+            'style="width:100%; padding:0.55rem 0.75rem; border:1px solid ' + t.rowBorder + '; border-radius:10px; background:' + t.inputBg + '; color:' + t.textColor + '; font-size:0.85rem;" ' +
+            'oninput="onCustomerHistoryFilterChange()">' +
+            '<select id="histFilterPayment" onchange="onCustomerHistoryFilterChange()" style="width:100%; padding:0.55rem 0.75rem; border:1px solid ' + t.rowBorder + '; border-radius:10px; background:' + t.inputBg + '; color:' + t.textColor + '; font-size:0.85rem;">' +
+            '<option value=""' + (filters.payment === '' ? ' selected' : '') + '>Tüm ödemeler</option>' +
+            '<option value="cash"' + (filters.payment === 'cash' ? ' selected' : '') + '>Nakit</option>' +
+            '<option value="bank_transfer"' + (filters.payment === 'bank_transfer' ? ' selected' : '') + '>Havale/EFT</option>' +
+            '<option value="credit_card"' + (filters.payment === 'credit_card' ? ' selected' : '') + '>Kredi Kartı</option>' +
+            '<option value="not_paid"' + (filters.payment === 'not_paid' ? ' selected' : '') + '>Alınmadı / Kısmi</option>' +
+            '<option value="mixed"' + (filters.payment === 'mixed' ? ' selected' : '') + '>Karışık</option>' +
+            '</select>' +
+            '<select id="histFilterSort" onchange="onCustomerHistoryFilterChange()" style="width:100%; padding:0.55rem 0.75rem; border:1px solid ' + t.rowBorder + '; border-radius:10px; background:' + t.inputBg + '; color:' + t.textColor + '; font-size:0.85rem;">' +
+            '<option value="date_desc"' + (filters.sort === 'date_desc' ? ' selected' : '') + '>Tarih (Yeni → Eski)</option>' +
+            '<option value="date_asc"' + (filters.sort === 'date_asc' ? ' selected' : '') + '>Tarih (Eski → Yeni)</option>' +
+            '<option value="spend_desc"' + (filters.sort === 'spend_desc' ? ' selected' : '') + '>Harcama (Yüksek → Düşük)</option>' +
+            '<option value="spend_asc"' + (filters.sort === 'spend_asc' ? ' selected' : '') + '>Harcama (Düşük → Yüksek)</option>' +
+            '</select></div>';
+
+        shell += '<div id="customerHistoryMeta"></div><div id="customerHistoryList"></div>';
+        body.innerHTML = shell;
+    }
+
+    var meta = document.getElementById('customerHistoryMeta');
+    var list = document.getElementById('customerHistoryList');
+    if (!list) return;
+
+    if (meta) {
+        meta.innerHTML = '<div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:0.65rem; color:' + t.labelColor + '; font-size:0.78rem;">' +
+            '<span><strong style="color:' + t.textColor + ';">' + filtered.length + '</strong> / ' + state.appointments.length + ' kayıt</span>' +
+            '<span style="display:flex; gap:0.35rem; flex-wrap:wrap;">' +
+            '<span style="background:#fef08a;color:#713f12;padding:2px 8px;border-radius:999px;font-weight:700;">Nakit</span>' +
+            '<span style="background:#fbcfe8;color:#831843;padding:2px 8px;border-radius:999px;font-weight:700;">Havale</span>' +
+            '<span style="background:#dc2626;color:#fff;padding:2px 8px;border-radius:999px;font-weight:700;">Alınmadı</span>' +
+            '</span></div>';
+    }
+
+    var listHtml = '';
+    if (!filtered.length) {
+        listHtml = '<div style="text-align:center; padding:2rem; color:' + t.labelColor + ';"><i class="fas fa-inbox" style="font-size:2rem; margin-bottom:0.5rem; display:block;"></i>Bu filtrelere uygun kayıt yok</div>';
+    } else {
+        listHtml = '<div style="display:flex; flex-direction:column; gap:0.65rem;">';
+        filtered.forEach(function (apt) {
+            var sc = statusColor[apt.status] || '#64748b';
+            var pay = historyPaymentStyle(apt);
+            var servicesHtml = '';
+            if (apt.services && apt.services.length) {
+                servicesHtml = apt.services.map(function (s) {
+                    var qty = s.quantity > 1 ? (' x' + s.quantity) : '';
+                    return '<div style="display:flex; justify-content:space-between; gap:0.75rem; font-size:0.82rem; color:' + t.textColor + ';">' +
+                        '<span><i class="fas fa-cut" style="color:#8b5cf6;font-size:0.7rem;margin-right:4px;"></i>' + escapeHtml(s.name) + qty + '</span>' +
+                        '<span style="font-weight:700; white-space:nowrap;">' + formatCurrency(s.price || 0) + '</span></div>';
+                }).join('');
+            } else if (apt.service_name) {
+                servicesHtml = '<div style="font-size:0.82rem; color:' + t.textColor + ';">' + escapeHtml(apt.service_name) + '</div>';
+            }
+
+            listHtml += '<div style="background:' + t.cardBg + '; border:1px solid ' + t.rowBorder + '; border-left:4px solid ' + pay.border + '; border-radius:12px; padding:0.9rem;">' +
+                '<div style="display:flex; justify-content:space-between; gap:0.75rem; align-items:flex-start; margin-bottom:0.5rem;">' +
+                '<div><div style="font-weight:700; color:' + t.textColor + '; font-size:0.98rem;">' +
+                escapeHtml(apt.appointment_date_formatted || formatDate(apt.appointment_date)) +
+                (apt.appointment_time_formatted ? (' · ' + escapeHtml(apt.appointment_time_formatted)) : '') +
+                '</div>' +
+                (apt.employee_name ? ('<div style="font-size:0.75rem; color:' + t.labelColor + '; margin-top:0.2rem;"><i class="fas fa-user-tie"></i> ' + escapeHtml(apt.employee_name) + '</div>') : '') +
+                '</div>' +
+                '<div style="display:flex; flex-direction:column; gap:0.35rem; align-items:flex-end;">' +
+                '<span style="background:' + sc + '22; color:' + sc + '; font-size:0.7rem; font-weight:700; padding:0.25rem 0.55rem; border-radius:999px; white-space:nowrap;">' +
+                escapeHtml(apt.status_label || apt.status) + '</span>' +
+                '<span style="background:' + pay.bg + '; color:' + pay.color + '; font-size:0.7rem; font-weight:800; padding:0.25rem 0.55rem; border-radius:6px; white-space:nowrap; border:1px solid ' + pay.border + ';">' +
+                escapeHtml(pay.label) + '</span>' +
+                '</div></div>' +
+                (servicesHtml ? ('<div style="margin:0.5rem 0; padding:0.5rem 0; border-top:1px dashed ' + t.rowBorder + '; border-bottom:1px dashed ' + t.rowBorder + ';">' + servicesHtml + '</div>') : '') +
+                '<div style="display:flex; flex-wrap:wrap; gap:0.75rem; justify-content:space-between; align-items:center; margin-top:0.45rem;">' +
+                '<div style="font-size:0.78rem; color:' + t.labelColor + ';">' +
+                (apt.payment_status ? ((apt.payment_status === 'paid' ? 'Ödendi' : 'Bekliyor')) : '') +
+                (apt.paid_amount != null ? (' · Alınan: ' + formatCurrency(apt.paid_amount)) : '') +
+                (apt.total_duration ? (' · ' + apt.total_duration + ' dk') : '') +
+                '</div>' +
+                '<div style="font-weight:900; color:' + (pay.key === 'not_paid' || pay.key === 'partial' ? '#dc2626' : '#059669') + '; font-size:1.05rem;">' +
+                (apt.total_price_formatted || formatCurrency(apt.total_price || 0)) + '</div>' +
+                '</div>' +
+                (apt.notes ? ('<div style="margin-top:0.55rem; font-size:0.78rem; color:' + t.labelColor + '; background:' + (t.isDark ? '#1e293b' : '#fff') + '; border:1px solid ' + t.rowBorder + '; border-radius:8px; padding:0.45rem 0.6rem;"><i class="fas fa-sticky-note"></i> ' + escapeHtml(apt.notes) + '</div>') : '') +
+                '</div>';
+        });
+        listHtml += '</div>';
+    }
+    list.innerHTML = listHtml;
+}
+
+function onCustomerHistoryFilterChange() {
+    if (!_customerHistoryState) return;
+    var searchEl = document.getElementById('histFilterSearch');
+    var payEl = document.getElementById('histFilterPayment');
+    var sortEl = document.getElementById('histFilterSort');
+    _customerHistoryState.filters.search = searchEl ? searchEl.value.trim() : '';
+    _customerHistoryState.filters.payment = payEl ? payEl.value : '';
+    _customerHistoryState.filters.sort = sortEl ? sortEl.value : 'date_desc';
+    renderCustomerHistoryContent();
+}
+
 function historyStatCard(cardBg, rowBorder, labelColor, color, icon, value, label) {
     return '<div style="background:' + cardBg + '; padding:0.65rem; border-radius:10px; display:flex; align-items:center; gap:0.6rem; border:1px solid ' + rowBorder + ';">' +
         '<div style="width:36px; height:36px; min-width:36px; border-radius:8px; background:' + color + '22; display:flex; align-items:center; justify-content:center;"><i class="fas ' + icon + '" style="font-size:0.85rem; color:' + color + ';"></i></div>' +
         '<div><p style="margin:0; font-size:1rem; font-weight:700; color:' + color + '; line-height:1.2;">' + value + '</p>' +
         '<p style="margin:0; font-size:0.65rem; text-transform:uppercase; letter-spacing:0.3px; color:' + labelColor + '; font-weight:600;">' + label + '</p></div></div>';
 }
+
+window.onCustomerHistoryFilterChange = onCustomerHistoryFilterChange;
 
 function closeModal() {
     closeDynamicModal();

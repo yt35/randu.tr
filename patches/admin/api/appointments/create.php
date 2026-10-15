@@ -192,6 +192,7 @@ try {
     $totalDuration = 0;
     $servicePriceMap = [];
     $serviceDurationMap = [];
+    $rangeSid = null;
     foreach ($services as $service) {
         $svcId = (int)$service['id'];
         // Aralıklı hizmetlerde istemcinin girdiği fiyatı kullan
@@ -205,6 +206,9 @@ try {
         $baseDuration = (int)$service['duration'];
         $servicePriceMap[$svcId] = $basePrice;
         $serviceDurationMap[$svcId] = $baseDuration;
+        if (($service['pricing_type'] ?? '') === 'range') {
+            $rangeSid = $svcId;
+        }
         
         // Varyant fiyat/süresini ekle
         $svcVariants = $variantData[(string)$svcId] ?? [];
@@ -425,6 +429,8 @@ try {
         $newId = $db->lastInsertId();
         $createdIds[] = $newId;
         
+        $serviceRows = [];
+        $computedSum = 0;
         foreach ($serviceIds as $serviceId) {
             $sid = (int)$serviceId;
             $svcVariants = $variantData[(string)$sid] ?? [];
@@ -434,7 +440,19 @@ try {
             $fp = ($servicePriceMap[$sid] ?? 0) + (float)$variantExtraPrice;
             $fd = ($serviceDurationMap[$sid] ?? 30) + (int)$variantExtraDuration;
             $q = $svcQty[$sid] ?? 1;
-            $serviceInsert->execute([$newId, $serviceId, $tenantId, $variantIds, $fp * $q, $fd * $q, $q]);
+            $computedSum += $fp * $q;
+            $serviceRows[] = [$newId, $serviceId, $tenantId, $variantIds, $fp * $q, $fd * $q, $q];
+        }
+        if ($rangeSid !== null && abs($computedSum - $totalPrice) > 0.009) {
+            foreach ($serviceRows as &$row) {
+                if ((int)$row[1] === (int)$rangeSid) {
+                    $row[4] = max(0, (float)$row[4] + ($totalPrice - $computedSum));
+                }
+            }
+            unset($row);
+        }
+        foreach ($serviceRows as $row) {
+            $serviceInsert->execute($row);
         }
     }
     

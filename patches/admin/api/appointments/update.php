@@ -136,8 +136,11 @@ try {
     $totalDuration = 0;
     $servicePriceMap = [];
     $serviceDurationMap = [];
+    $svcPricingType = [];
+    $rangeSid = null;
     foreach ($services as $service) {
         $svcId = (int)$service['id'];
+        $svcPricingType[$svcId] = $service['pricing_type'] ?? 'fixed';
         if (array_key_exists((string)$svcId, (array)$rangePrices) || array_key_exists($svcId, (array)$rangePrices)) {
             $basePrice = (float)($rangePrices[(string)$svcId] ?? $rangePrices[$svcId]);
         } elseif ($service['pricing_type'] === 'range' && $service['price_min'] !== null) {
@@ -148,6 +151,9 @@ try {
         $baseDuration = (int)$service['duration'];
         $servicePriceMap[$svcId] = $basePrice;
         $serviceDurationMap[$svcId] = $baseDuration;
+        if (($service['pricing_type'] ?? '') === 'range') {
+            $rangeSid = $svcId;
+        }
         
         // Varyant fiyat/süresini ekle
         $svcVariants = $variantData[(string)$svcId] ?? [];
@@ -198,16 +204,24 @@ try {
     
     // Yeni hizmet ilişkilerini ekle (varyant bilgileriyle)
     $serviceInsert = $db->prepare("INSERT INTO appointment_services (appointment_id, service_id, variant_ids, final_price, final_duration, quantity) VALUES (?, ?, ?, ?, ?, ?)");
+    $serviceRows = [];
+    $computedSum = 0;
     foreach ($serviceIds as $serviceId) {
         $sid = (int)$serviceId;
         $svcVariants = $variantData[(string)$sid] ?? [];
+        $hasRangeOverride = array_key_exists((string)$sid, (array)$rangePrices) || array_key_exists($sid, (array)$rangePrices);
         if (!empty($svcVariants)) {
             // Yeni varyant seçimi gönderilmiş
             $variantIds = json_encode(array_values(array_column($svcVariants, 'id')));
             $variantExtraPrice = array_sum(array_column($svcVariants, 'extra_price'));
             $variantExtraDuration = array_sum(array_column($svcVariants, 'extra_duration'));
-            $fp = ($servicePriceMap[$sid] ?? 0) + (float)$variantExtraPrice;
-            $fd = ($serviceDurationMap[$sid] ?? 30) + (int)$variantExtraDuration;
+            $fp = (($servicePriceMap[$sid] ?? 0) + (float)$variantExtraPrice) * ($svcQty[$sid] ?? 1);
+            $fd = (($serviceDurationMap[$sid] ?? 30) + (int)$variantExtraDuration) * ($svcQty[$sid] ?? 1);
+        } elseif ($hasRangeOverride || ($svcPricingType[$sid] ?? '') === 'range') {
+            // Aralıklı fiyat / range_prices öncelikli — eski final_price üzerine yazma
+            $variantIds = isset($oldDetails[$sid]) ? $oldDetails[$sid]['variant_ids'] : null;
+            $fp = isset($servicePriceMap[$sid]) ? $servicePriceMap[$sid] * ($svcQty[$sid] ?? 1) : null;
+            $fd = isset($serviceDurationMap[$sid]) ? $serviceDurationMap[$sid] * ($svcQty[$sid] ?? 1) : null;
         } elseif (empty($variantData) && isset($oldDetails[$sid]) && (int)($oldDetails[$sid]['quantity'] ?? 1) === ($svcQty[$sid] ?? 1)) {
             // variant_data hiç gönderilmemişse eski kayıtları koru
             $variantIds = $oldDetails[$sid]['variant_ids'];
@@ -219,7 +233,19 @@ try {
             $fp = isset($servicePriceMap[$sid]) ? $servicePriceMap[$sid] * ($svcQty[$sid] ?? 1) : null;
             $fd = isset($serviceDurationMap[$sid]) ? $serviceDurationMap[$sid] * ($svcQty[$sid] ?? 1) : null;
         }
-        $serviceInsert->execute([$appointmentId, $sid, $variantIds, $fp, $fd, $svcQty[$sid] ?? 1]);
+        $computedSum += (float)$fp;
+        $serviceRows[] = [$appointmentId, $sid, $variantIds, $fp, $fd, $svcQty[$sid] ?? 1];
+    }
+    if ($rangeSid !== null && abs($computedSum - $totalPrice) > 0.009) {
+        foreach ($serviceRows as &$row) {
+            if ((int)$row[1] === $rangeSid) {
+                $row[3] = max(0, (float)$row[3] + ($totalPrice - $computedSum));
+            }
+        }
+        unset($row);
+    }
+    foreach ($serviceRows as $row) {
+        $serviceInsert->execute($row);
     }
     
     $db->commit();
