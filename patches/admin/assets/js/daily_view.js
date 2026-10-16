@@ -578,24 +578,19 @@ function renderWaitingList() {
         const dialPhone = normalizePhoneForDial(entry.customer_phone || '');
 
         const calledIcon = entry.status === 'called' ? '<i class="fas fa-check waiting-called-icon"></i>' : '';
-        const hasPrefTime = !!(entry.preferred_time && String(entry.preferred_time).substring(0, 5).length >= 4);
-        const bBadge = hasPrefTime
-            ? `<span class="waiting-b-badge" title="Bu saat defterde B ile işaretli — bekleme hatırlatması">B</span>`
-            : '';
         return `
             <div class="waiting-item ${calledClass}">
                 <div class="waiting-item-top">
-                    <div class="waiting-customer">${bBadge}${name} ${calledIcon}</div>
+                    <div class="waiting-customer">${name} ${calledIcon}</div>
                     <span class="waiting-chip"><i class="fas fa-phone"></i> ${phone}</span>
                 </div>
                 <div class="waiting-meta">
                     <span class="waiting-chip"><i class="fas fa-user-tie"></i> ${prefEmployee}</span>
-                    <span class="waiting-chip"><i class="fas fa-clock"></i> ${prefTime}${hasPrefTime ? ' · B' : ''}</span>
+                    <span class="waiting-chip"><i class="fas fa-clock"></i> ${prefTime}</span>
                     <span class="waiting-chip"><i class="fas fa-cut"></i> ${services}</span>
                     ${entry.call_when_available == 1 ? '<span class="waiting-chip"><i class="fas fa-bell"></i> Bosluk olursa aranabilir</span>' : ''}
                 </div>
                 ${note ? `<div class="waiting-chip waiting-chip-note">${note}</div>` : ''}
-                ${hasPrefTime ? '<div class="waiting-chip waiting-chip-b-note"><i class="fas fa-info-circle"></i> Defterde bu saatin kartlarında <strong>B</strong> işareti görünür</div>' : ''}
                 <div class="waiting-actions">
                     <button class="btn btn-success" onclick="openWaitlistAsAppointment(${entry.id})"><i class="fas fa-calendar-plus"></i> Randevuya Cevir</button>
                     <button class="btn btn-primary" onclick="markWaitlistCalled(${entry.id})"><i class="fas fa-phone-volume"></i> Arandi</button>
@@ -860,15 +855,9 @@ function renderScheduleGrid() {
                 
                 slot.onclick = (e) => handleSlotClick(e, slot);
             } else {
-                // Boş slot — bekleme listesi varsa B hatırlatması
+                // Boş slot
                 slot.classList.add('available');
-                const waitForEmpty = (waitByTime[timeSlot] || []);
-                let emptyHtml = '<div class="slot-add-icon">+</div><div class="slot-add-text">Randevu Ekle</div>';
-                if (waitForEmpty.length > 0) {
-                    const names = waitForEmpty.map(w => w.customer_name || 'Müşteri').join(', ');
-                    emptyHtml = `<div class="waitlist-indicator" title="Bu saatte bekleme listesinde: ${escapeHtml(names)}">B</div>` + emptyHtml;
-                }
-                slot.innerHTML = emptyHtml;
+                slot.innerHTML = '<div class="slot-add-icon">+</div><div class="slot-add-text">Randevu Ekle</div>';
                 slot.onclick = (e) => handleAvailableSlotClick(e, slot);
             }
             
@@ -943,14 +932,6 @@ function createAppointmentItemForSlot(appointment, totalInSlot, index) {
         // Düzenlenmiş randevu göstergesi
         if (appointment.is_edited == 1 && appointment.status === 'completed') {
             content += '<div class="edited-indicator" title="Düzenlenmiş Randevu">D</div>';
-        }
-
-        // Bekleme listesi hatırlatması (tercih edilen saat = bu kartın saati)
-        const aptTimeKey = String(appointment.appointment_time_formatted || appointment.appointment_time || '').substring(0, 5);
-        const waitForSlot = (getWaitlistByPreferredTime()[aptTimeKey] || []);
-        if (waitForSlot.length > 0) {
-            const names = waitForSlot.map(w => w.customer_name || 'Müşteri').join(', ');
-            content += `<div class="waitlist-indicator" title="Bu saatte bekleme listesinde: ${escapeHtml(names)}">B</div>`;
         }
         
         // Birden fazla randevu badge
