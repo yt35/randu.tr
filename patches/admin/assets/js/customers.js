@@ -9,7 +9,9 @@ var deleteModalEl = null;
 
 // Log fonksiyonu
 function logDebug(msg) {
-    console.log('[CUSTOMERS] ' + msg);
+    if (window.RANDU_DEBUG || (typeof localStorage !== 'undefined' && localStorage.getItem('RANDU_DEBUG') === '1')) {
+        console.log('[CUSTOMERS] ' + msg);
+    }
 }
 
 // ==========================================

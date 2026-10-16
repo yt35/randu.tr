@@ -1,3 +1,9 @@
+function dvDebugLog() {
+    if (window.RANDU_DEBUG || (typeof localStorage !== 'undefined' && localStorage.getItem('RANDU_DEBUG') === '1')) {
+        console.log.apply(console, arguments);
+    }
+}
+
 ﻿/**
  * Daily View - AJAX/API JavaScript
  * Tüm işlemler API üzerinden gerçekleştirilir, sayfa yenilenmez
@@ -1777,7 +1783,7 @@ function showAddModalForSlot(event, element) {
     
     // GUARD: Taşıma modu aktifse modal açma!
     if (moveMode.active && moveMode.appointmentData) {
-        console.log('showAddModalForSlot: Move mode active, blocking modal');
+        dvDebugLog('showAddModalForSlot: Move mode active, blocking modal');
         handleAvailableSlotClick(event, element);
         return;
     }
@@ -1912,7 +1918,7 @@ function handleSlotClick(event, element) {
     
     // Taşıma modu aktifse - dolu slot'a tıklanmış demek, uyar ve iptal et
     if (moveMode.active && moveMode.appointmentData) {
-        console.log('handleSlotClick: Move mode active but non-available slot clicked');
+        dvDebugLog('handleSlotClick: Move mode active but non-available slot clicked');
         _notify('Lütfen yeşil (boş) bir alana tıklayın veya iptal edin', 'warning');
         return; // Hiçbir işlem yapma
     }
@@ -2682,7 +2688,7 @@ function showConfirmationModal(title, message, callback) {
     modal.style.opacity = '1';
     modal.style.pointerEvents = 'auto';
     
-    console.log('showConfirmationModal: Modal displayed');
+    dvDebugLog('showConfirmationModal: Modal displayed');
 }
 
 // Randevu ekleme
@@ -3325,7 +3331,7 @@ function startMoveMode(appointmentData) {
     // Bilgi mesajı göster
     showMoveInfoBanner();
     
-    console.log('Move mode started for:', appointmentData.customer_name);
+    dvDebugLog('Move mode started for:', appointmentData.customer_name);
 }
 
 // Taşıma modunu bitir
@@ -3342,7 +3348,7 @@ function endMoveMode() {
     // Info banner'ı kaldır
     hideMoveInfoBanner();
     
-    console.log('Move mode ended');
+    dvDebugLog('Move mode ended');
 }
 
 // Taşıma info banner'ı göster
@@ -3390,7 +3396,7 @@ function handleAvailableSlotClick(event, slot) {
     event.stopPropagation();
     event.preventDefault(); // Tüm default davranışları engelle
     
-    console.log('handleAvailableSlotClick called, moveMode.active:', moveMode.active);
+    dvDebugLog('handleAvailableSlotClick called, moveMode.active:', moveMode.active);
     
     // Taşıma modu aktifse - BU ÖNCELİKLİDİR!
     if (moveMode.active && moveMode.appointmentData) {
@@ -3406,7 +3412,7 @@ function handleAvailableSlotClick(event, slot) {
             'Randevuyu Taşı',
             `<strong>${savedData.customer_name || 'Müşteri'}</strong>'in randevusunu <strong>${newTime}</strong> saatine taşımak istediğinizden emin misiniz?`,
             () => {
-                console.log('Confirmation accepted, calling dragAppointment');
+                dvDebugLog('Confirmation accepted, calling dragAppointment');
                 dragAppointment(savedData.id, newEmployeeId, newTime);
             }
         );
@@ -3423,9 +3429,9 @@ let currentDragData = null;
 // Named handler functions
 function handleDragStart(e) {
     const item = e.target.closest('.appointment-item[draggable="true"]');
-    console.log('DRAGSTART triggered, item:', item);
+    dvDebugLog('DRAGSTART triggered, item:', item);
     if (!item) {
-        console.log('DRAGSTART: No draggable item found');
+        dvDebugLog('DRAGSTART: No draggable item found');
         return;
     }
     
@@ -3433,18 +3439,18 @@ function handleDragStart(e) {
     try {
         details = JSON.parse(item.dataset.appointmentDetails || '{}');
     } catch (err) {
-        console.log('DRAGSTART: JSON parse error', err);
+        dvDebugLog('DRAGSTART: JSON parse error', err);
         return;
     }
     
     if (details.status === 'break') {
-        console.log('DRAGSTART: Break item, preventing');
+        dvDebugLog('DRAGSTART: Break item, preventing');
         e.preventDefault();
         return;
     }
     
     currentDragData = details;
-    console.log('DRAGSTART: currentDragData set:', currentDragData);
+    dvDebugLog('DRAGSTART: currentDragData set:', currentDragData);
     e.dataTransfer.setData('text/plain', JSON.stringify(details));
     e.dataTransfer.effectAllowed = 'move';
     
@@ -3486,10 +3492,10 @@ function handleDragLeave(e) {
 }
 
 function handleDrop(e) {
-    console.log('DROP triggered');
+    dvDebugLog('DROP triggered');
     const slot = e.target.closest('.appointment-slot.available');
     if (!slot) {
-        console.log('DROP: No available slot found');
+        dvDebugLog('DROP: No available slot found');
         return;
     }
     
@@ -3497,22 +3503,22 @@ function handleDrop(e) {
     e.stopPropagation();
     slot.classList.remove('drag-over');
     
-    console.log('DROP: currentDragData:', currentDragData);
+    dvDebugLog('DROP: currentDragData:', currentDragData);
     let draggedItemData = currentDragData;
     
     // Fallback: dataTransfer'dan al
     if (!draggedItemData) {
-        console.log('DROP: Trying dataTransfer fallback');
+        dvDebugLog('DROP: Trying dataTransfer fallback');
         try {
             const data = e.dataTransfer.getData('text/plain');
-            console.log('DROP: dataTransfer data:', data);
+            dvDebugLog('DROP: dataTransfer data:', data);
             if (data) draggedItemData = JSON.parse(data);
         } catch (err) {
             console.error('Drop parse error:', err);
         }
     }
     
-    console.log('DROP: Final draggedItemData:', draggedItemData);
+    dvDebugLog('DROP: Final draggedItemData:', draggedItemData);
     
     if (draggedItemData && draggedItemData.id) {
         const newTime = slot.dataset.time;
@@ -3522,27 +3528,27 @@ function handleDrop(e) {
         const savedData = {...draggedItemData};
         currentDragData = null;
         
-        console.log('DROP: Showing confirmation modal');
+        dvDebugLog('DROP: Showing confirmation modal');
         showConfirmationModal(
             'Randevuyu Taşı',
             `<strong>${savedData.customer_name || 'Müşteri'}</strong>'in randevusunu <strong>${newTime}</strong> saatine taşımak istediğinizden emin misiniz?`,
             () => {
-                console.log('DROP: Callback executing dragAppointment');
+                dvDebugLog('DROP: Callback executing dragAppointment');
                 dragAppointment(savedData.id, newEmployeeId, newTime);
             }
         );
     } else {
-        console.log('DROP: No valid data, clearing');
+        dvDebugLog('DROP: No valid data, clearing');
         currentDragData = null;
     }
 }
 
 function initializeDragAndDrop() {
-    console.log('initializeDragAndDrop called');
+    dvDebugLog('initializeDragAndDrop called');
     
     // Draggable attribute'larını ayarla
     const items = document.querySelectorAll('.appointment-item');
-    console.log('Found appointment items:', items.length);
+    dvDebugLog('Found appointment items:', items.length);
     
     items.forEach(item => {
         const details = JSON.parse(item.dataset.appointmentDetails || '{}');
@@ -3568,12 +3574,12 @@ function initializeDragAndDrop() {
     document.addEventListener('dragleave', handleDragLeave, true);
     document.addEventListener('drop', handleDrop, true);
     
-    console.log('Drag & Drop listeners attached');
+    dvDebugLog('Drag & Drop listeners attached');
 }
 
 async function dragAppointment(appointmentId, newEmployeeId, newTime) {
     try {
-        console.log('dragAppointment called with:', { appointmentId, newEmployeeId, newTime });
+        dvDebugLog('dragAppointment called with:', { appointmentId, newEmployeeId, newTime });
         
         const result = await apiRequest('api/daily_view/drag.php', 'POST', {
             appointment_id: appointmentId,
@@ -3581,7 +3587,7 @@ async function dragAppointment(appointmentId, newEmployeeId, newTime) {
             new_time: newTime
         });
         
-        console.log('dragAppointment result:', result);
+        dvDebugLog('dragAppointment result:', result);
         
         if (result.success) {
             _notify(result.message, 'success');
@@ -3984,7 +3990,7 @@ document.addEventListener('DOMContentLoaded', function() {
         if (e.target.closest('#confirmOkBtn')) {
             e.preventDefault();
             e.stopPropagation();
-            console.log('confirmOkBtn clicked, onConfirmCallback:', typeof onConfirmCallback);
+            dvDebugLog('confirmOkBtn clicked, onConfirmCallback:', typeof onConfirmCallback);
             
             // Modal'ı kapat
             const modal = document.getElementById('confirmModal');
