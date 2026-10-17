@@ -2256,18 +2256,25 @@ function showDetailModal(appointment) {
 
             let customerSection = '';
             if (apt.customer_id) {
+                const custNameSafe = escapeHtml(apt.customer_name || '-');
+                const custId = parseInt(apt.customer_id, 10);
                 customerSection = `
                 <div class="detail-section">
                     <div class="detail-section-title"><i class="fas fa-user"></i> Müşteri Bilgileri</div>
                     <div class="detail-grid">
-                        <div class="detail-item"><span class="dl">Ad Soyad</span><span class="dv">${apt.customer_name || '-'}</span></div>
-                        <div class="detail-item"><span class="dl">Telefon</span><span class="dv"><a href="tel:${normalizePhoneForDial(apt.customer_phone || '')}" style="color:#3b82f6;text-decoration:none;">${apt.customer_phone || '-'}</a></span></div>
-                        ${apt.customer_email ? '<div class="detail-item full"><span class="dl">E-posta</span><span class="dv">' + apt.customer_email + '</span></div>' : ''}
+                        <div class="detail-item"><span class="dl">Ad Soyad</span><span class="dv"><button type="button" class="detail-customer-link" onclick="toggleDetailCustomerHistory(${custId})" title="Müşteri geçmişini aç">${custNameSafe} <i class="fas fa-external-link-alt" style="font-size:0.7rem;opacity:0.7;"></i></button></span></div>
+                        <div class="detail-item"><span class="dl">Telefon</span><span class="dv"><a href="tel:${normalizePhoneForDial(apt.customer_phone || '')}" style="color:#3b82f6;text-decoration:none;">${escapeHtml(apt.customer_phone || '-')}</a></span></div>
+                        ${apt.customer_email ? '<div class="detail-item full"><span class="dl">E-posta</span><span class="dv">' + escapeHtml(apt.customer_email) + '</span></div>' : ''}
                     </div>
                 </div>
-                <div class="detail-section">
-                    <div class="detail-section-title"><i class="fas fa-chart-bar"></i> Müşteri Geçmişi</div>
-                    <div class="customer-stat-grid">
+                <div class="detail-section detail-history-section">
+                    <div class="detail-section-title" style="display:flex;justify-content:space-between;align-items:center;gap:0.5rem;flex-wrap:wrap;">
+                        <span><i class="fas fa-chart-bar"></i> Müşteri Geçmişi</span>
+                        <button type="button" class="btn-detail-history" onclick="toggleDetailCustomerHistory(${custId})">
+                            <i class="fas fa-history"></i> Önceki randevuları gör
+                        </button>
+                    </div>
+                    <div class="customer-stat-grid customer-stat-grid-clickable" onclick="toggleDetailCustomerHistory(${custId})" title="Tıklayınca önceki randevular açılır" role="button" tabindex="0">
                         <div class="customer-stat-card"><div class="csv">${parseInt(cs.total_appointments) || 0}</div><div class="csl">Toplam Randevu</div></div>
                         <div class="customer-stat-card"><div class="csv">${parseInt(cs.total_completed) || 0}</div><div class="csl">Tamamlanan</div></div>
                         <div class="customer-stat-card"><div class="csv">${formatTL(cs.total_spent || 0)}</div><div class="csl">Toplam Harcama</div></div>
@@ -2275,6 +2282,21 @@ function showDetailModal(appointment) {
                     <div class="detail-grid" style="margin-top:8px;">
                         ${cs.first_visit ? '<div class="detail-item"><span class="dl">İlk Ziyaret</span><span class="dv">' + fmtDate(cs.first_visit) + '</span></div>' : ''}
                         ${cs.last_visit ? '<div class="detail-item"><span class="dl">Son Ziyaret</span><span class="dv">' + fmtDate(cs.last_visit) + '</span></div>' : ''}
+                    </div>
+                    <div id="detailCustomerHistoryPanel" class="detail-customer-history-panel" hidden data-customer-id="${custId}">
+                        <div class="detail-history-toolbar">
+                            <input type="search" id="detailHistSearch" placeholder="Hizmet, personel ara..." oninput="filterDetailCustomerHistory()">
+                            <select id="detailHistPayment" onchange="filterDetailCustomerHistory()">
+                                <option value="">Tüm ödemeler</option>
+                                <option value="cash">Nakit</option>
+                                <option value="bank_transfer">Havale/EFT</option>
+                                <option value="credit_card">Kredi Kartı</option>
+                                <option value="not_paid">Alınmadı / Kısmi</option>
+                            </select>
+                        </div>
+                        <div id="detailCustomerHistoryList" class="detail-customer-history-list">
+                            <div class="detail-history-loading"><i class="fas fa-spinner fa-spin"></i> Geçmiş yükleniyor...</div>
+                        </div>
                     </div>
                 </div>`;
             }
@@ -2306,6 +2328,145 @@ function showDetailModal(appointment) {
             console.error('Detail fetch error:', err);
         });
 }
+
+/** Defter detay modalı — müşteri geçmişi (önceki randevular) */
+var _detailHistoryState = null;
+
+function detailHistoryPayStyle(apt) {
+    var method = apt.payment_method || '';
+    var paidAmount = apt.paid_amount != null ? parseFloat(apt.paid_amount) : null;
+    var total = parseFloat(apt.total_price || 0);
+    var isPartial = paidAmount !== null && paidAmount > 0 && paidAmount < total;
+    if (isPartial || method === 'not_paid' || apt.payment_status === 'pending') {
+        return { key: 'not_paid', label: isPartial ? 'Kısmi' : 'Alınmadı', bg: '#b91c1c', color: '#fff' };
+    }
+    if (method === 'cash') return { key: 'cash', label: 'Nakit', bg: '#fef08a', color: '#713f12' };
+    if (method === 'bank_transfer') return { key: 'bank_transfer', label: 'Havale/EFT', bg: '#fbcfe8', color: '#831843' };
+    if (method === 'credit_card') return { key: 'credit_card', label: 'Kredi Kartı', bg: '#dbeafe', color: '#1e3a8a' };
+    return { key: 'other', label: apt.payment_method_label || '—', bg: '#f1f5f9', color: '#475569' };
+}
+
+async function toggleDetailCustomerHistory(customerId) {
+    var panel = document.getElementById('detailCustomerHistoryPanel');
+    var list = document.getElementById('detailCustomerHistoryList');
+    if (!panel || !list) return;
+
+    if (!panel.hidden && String(panel.dataset.customerId) === String(customerId) && _detailHistoryState) {
+        panel.hidden = true;
+        return;
+    }
+
+    panel.hidden = false;
+    panel.dataset.customerId = String(customerId);
+    list.innerHTML = '<div class="detail-history-loading"><i class="fas fa-spinner fa-spin"></i> Geçmiş yükleniyor...</div>';
+
+    try {
+        var result = await apiRequest('api/customers/history.php?customer_id=' + encodeURIComponent(customerId) + '&limit=50', 'GET');
+        if (!result.success) {
+            list.innerHTML = '<div class="detail-history-empty">' + escapeHtml(result.message || 'Geçmiş yüklenemedi') + '</div>';
+            _detailHistoryState = null;
+            return;
+        }
+        _detailHistoryState = {
+            appointments: result.appointments || [],
+            filters: { search: '', payment: '' }
+        };
+        var searchEl = document.getElementById('detailHistSearch');
+        var payEl = document.getElementById('detailHistPayment');
+        if (searchEl) searchEl.value = '';
+        if (payEl) payEl.value = '';
+        renderDetailCustomerHistoryList();
+        // Panele kaydır
+        panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    } catch (err) {
+        list.innerHTML = '<div class="detail-history-empty">Bağlantı hatası</div>';
+        _detailHistoryState = null;
+        console.error('Detail customer history error:', err);
+    }
+}
+
+function filterDetailCustomerHistory() {
+    if (!_detailHistoryState) return;
+    var searchEl = document.getElementById('detailHistSearch');
+    var payEl = document.getElementById('detailHistPayment');
+    _detailHistoryState.filters.search = searchEl ? searchEl.value.trim() : '';
+    _detailHistoryState.filters.payment = payEl ? payEl.value : '';
+    renderDetailCustomerHistoryList();
+}
+
+function renderDetailCustomerHistoryList() {
+    var list = document.getElementById('detailCustomerHistoryList');
+    if (!list || !_detailHistoryState) return;
+
+    var filtered = (_detailHistoryState.appointments || []).slice();
+    var f = _detailHistoryState.filters || {};
+    if (f.search) {
+        var q = f.search.toLocaleLowerCase('tr-TR');
+        filtered = filtered.filter(function (apt) {
+            var hay = [
+                apt.service_name || '',
+                apt.employee_name || '',
+                apt.notes || '',
+                apt.payment_method_label || '',
+                apt.status_label || '',
+                (apt.services || []).map(function (s) { return s.name; }).join(' ')
+            ].join(' ').toLocaleLowerCase('tr-TR');
+            return hay.indexOf(q) !== -1;
+        });
+    }
+    if (f.payment) {
+        filtered = filtered.filter(function (apt) {
+            var style = detailHistoryPayStyle(apt);
+            return style.key === f.payment;
+        });
+    }
+
+    if (!filtered.length) {
+        list.innerHTML = '<div class="detail-history-empty"><i class="fas fa-inbox"></i> Kayıt bulunamadı</div>';
+        return;
+    }
+
+    var statusColor = {
+        completed: '#10b981', confirmed: '#3b82f6', pending: '#f59e0b',
+        cancelled: '#ef4444', 'no-show': '#94a3b8'
+    };
+
+    var html = '<div class="detail-history-meta">' + filtered.length + ' / ' + _detailHistoryState.appointments.length + ' randevu</div>';
+    filtered.forEach(function (apt) {
+        var pay = detailHistoryPayStyle(apt);
+        var sc = statusColor[apt.status] || '#64748b';
+        var services = '';
+        if (apt.services && apt.services.length) {
+            services = apt.services.map(function (s) {
+                var qty = s.quantity > 1 ? (' x' + s.quantity) : '';
+                return '<div class="dhi-svc"><span>' + escapeHtml(s.name) + qty + '</span><strong>' + formatTL(s.price || 0) + '</strong></div>';
+            }).join('');
+        } else if (apt.service_name) {
+            services = '<div class="dhi-svc"><span>' + escapeHtml(apt.service_name) + '</span></div>';
+        }
+        html += '<div class="detail-history-item" style="border-left-color:' + pay.bg + ';">' +
+            '<div class="dhi-top">' +
+            '<div><div class="dhi-date">' + escapeHtml(apt.appointment_date_formatted || '') +
+            (apt.appointment_time_formatted ? (' · ' + escapeHtml(apt.appointment_time_formatted)) : '') +
+            '</div>' +
+            (apt.employee_name ? ('<div class="dhi-emp"><i class="fas fa-user-tie"></i> ' + escapeHtml(apt.employee_name) + '</div>') : '') +
+            '</div>' +
+            '<div class="dhi-badges">' +
+            '<span class="dhi-status" style="background:' + sc + '22;color:' + sc + ';">' + escapeHtml(apt.status_label || apt.status || '') + '</span>' +
+            '<span class="dhi-pay" style="background:' + pay.bg + ';color:' + pay.color + ';">' + escapeHtml(pay.label) + '</span>' +
+            '</div></div>' +
+            (services ? ('<div class="dhi-services">' + services + '</div>') : '') +
+            '<div class="dhi-bottom">' +
+            '<span class="dhi-total" style="color:' + (pay.key === 'not_paid' ? '#b91c1c' : '#059669') + ';">' +
+            (apt.total_price_formatted || formatTL(apt.total_price || 0)) + '</span></div>' +
+            (apt.notes ? ('<div class="dhi-notes"><i class="fas fa-sticky-note"></i> ' + escapeHtml(apt.notes) + '</div>') : '') +
+            '</div>';
+    });
+    list.innerHTML = html;
+}
+
+window.toggleDetailCustomerHistory = toggleDetailCustomerHistory;
+window.filterDetailCustomerHistory = filterDetailCustomerHistory;
 
 // Tamamlama modalı
 function showCompleteModal(appointment) {
