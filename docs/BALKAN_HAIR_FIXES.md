@@ -10,6 +10,7 @@ Canlıya (`/home/randu.tr/public_html/admin/`) deploy edildi. Bu repodaki `patch
 4. **Fiyat aralıklı hizmetler**: Oluşturma/tamamlama/güncellemede girilen tutar `appointment_services.final_price` ve `total_price` ile senkron; tek aralık hizmette toplam farkı `final_price`’a yazma; tamamlayınca min fiyata dönme engellendi.
 5. **Defter ödeme renkleri**: Alınmadı daha koyu kırmızı (`#b91c1c` pill); nakit sarı, havale pembe — geçmiş ile aynı dil.
 6. **Bekleme listesi B**: Tercih edilen saatte defter saat etiketi + dolu/boş kartlarda `B` (D/+ gibi); bekleme listesi satırında da B ve not.
+7. **Ürün barkod görünürlüğü**: Ürün kartına tıklanınca hızlı işlem modalında barkod varsa JsBarcode görseli + kod; düzenleme modalında da önizleme.
 
 ## Deploy edilen dosyalar
 
@@ -18,3 +19,4 @@ Canlıya (`/home/randu.tr/public_html/admin/`) deploy edildi. Bu repodaki `patch
 - `api/customers/*` (history/list — tur 1)
 - `api/appointments/{create,complete,update,list}.php`
 - `api/daily_view/{create,complete,update}.php`
+- `products.php` (barkod görsel önizleme)
