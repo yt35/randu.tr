@@ -27,8 +27,11 @@ if ($_SERVER['REQUEST_METHOD'] !== 'GET') {
 try {
     // Filtre parametreleri
     $search = trim(sanitize($_GET['search'] ?? ''));
-    $sort = sanitize($_GET['sort'] ?? 'name');
-    $order = strtoupper(sanitize($_GET['order'] ?? 'ASC'));
+    $sort = trim(sanitize($_GET['sort'] ?? 'created_at'));
+    if ($sort === '') {
+        $sort = 'created_at';
+    }
+    $order = strtoupper(trim(sanitize($_GET['order'] ?? 'DESC')));
     $limit = intval($_GET['limit'] ?? 0);
     $offset = intval($_GET['offset'] ?? 0);
     $gender = sanitize($_GET['gender'] ?? '');
@@ -134,13 +137,23 @@ try {
         $sql .= ' AND ' . implode(' AND ', $having);
     }
 
-    // Sıralama — sayısal alanlarda NULL'ları sona at
+    // Sıralama — JOIN'de ambiguous kolon olmasın (c.created_at vs ct.created_at)
+    $sortExprMap = [
+        'name' => 'COALESCE(ct.name, c.name)',
+        'phone' => 'c.phone',
+        'email' => 'c.email',
+        'created_at' => 'c.created_at',
+        'last_visit' => 'agg.last_visit',
+        'total_visits' => 'COALESCE(agg.total_visits, 0)',
+        'total_spent' => 'COALESCE(agg.total_spent, 0)',
+    ];
+    $sortExpr = $sortExprMap[$sort] ?? 'COALESCE(ct.name, c.name)';
     if (in_array($sort, ['total_visits', 'total_spent'], true)) {
-        $sql .= " ORDER BY " . $sort . " " . $order . ", name ASC";
+        $sql .= " ORDER BY {$sortExpr} {$order}, COALESCE(ct.name, c.name) ASC";
     } elseif (in_array($sort, ['last_visit', 'created_at'], true)) {
-        $sql .= " ORDER BY (" . $sort . " IS NULL) ASC, " . $sort . " " . $order . ", name ASC";
+        $sql .= " ORDER BY ({$sortExpr} IS NULL) ASC, {$sortExpr} {$order}, COALESCE(ct.name, c.name) ASC";
     } else {
-        $sql .= " ORDER BY " . $sort . " " . $order;
+        $sql .= " ORDER BY {$sortExpr} {$order}";
     }
 
     // Limit

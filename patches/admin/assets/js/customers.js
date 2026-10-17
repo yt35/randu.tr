@@ -408,15 +408,23 @@ document.addEventListener('DOMContentLoaded', function () {
             var birthdayInput = document.getElementById('birthday_days');
             
             var search = searchInput ? searchInput.value.trim() : '';
-            var sort = sortSelect ? sortSelect.value : 'created_at_DESC';
+            var sort = sortSelect ? String(sortSelect.value || '').trim() : '';
+            if (!sort) {
+                sort = 'created_at_DESC';
+                if (sortSelect) sortSelect.value = sort;
+            }
             var gender = genderSelect ? genderSelect.value : '';
             var lastVisitDays = lastVisitInput ? lastVisitInput.value : '';
             var birthdayDays = birthdayInput ? birthdayInput.value : '';
             
-            // Sıralama değerini parçala (appointment_count_ASC formatında olabilir)
+            // Sıralama değerini parçala (appointment_count_ASC / created_at_DESC)
             var lastUnderscoreIndex = sort.lastIndexOf('_');
-            var sortField = lastUnderscoreIndex > 0 ? sort.substring(0, lastUnderscoreIndex) : 'name';
-            var sortOrder = lastUnderscoreIndex > 0 ? sort.substring(lastUnderscoreIndex + 1) : 'ASC';
+            var sortField = lastUnderscoreIndex > 0 ? sort.substring(0, lastUnderscoreIndex) : 'created_at';
+            var sortOrder = lastUnderscoreIndex > 0 ? sort.substring(lastUnderscoreIndex + 1) : 'DESC';
+            if (sortOrder !== 'ASC' && sortOrder !== 'DESC') {
+                sortField = 'created_at';
+                sortOrder = 'DESC';
+            }
             
             logDebug('Filtering: search=' + search + ', sort=' + sortField + ', order=' + sortOrder);
             
