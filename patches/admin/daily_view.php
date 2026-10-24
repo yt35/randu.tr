@@ -1191,14 +1191,14 @@ include 'includes/header.php';
                 <input type="text" class="form-control service-search-input" id="serviceSearchInput" placeholder="Hizmet ara..." autocomplete="off">
                 <div class="services-selection" id="servicesSelection">
                     <?php foreach($services as $service): 
-                        $display_price = ($service['pricing_type'] === 'range' && !empty($service['price_min'])) ? $service['price_min'] : $service['price'];
-                        $is_range = ($service['pricing_type'] === 'range' && !empty($service['price_min']) && !empty($service['price_max']));
+                        $display_price = ($service['pricing_type'] === 'range' && $service['price_min'] !== null && $service['price_min'] !== '') ? $service['price_min'] : $service['price'];
+                        $is_range = ($service['pricing_type'] === 'range' && $service['price_min'] !== null && $service['price_min'] !== '' && $service['price_max'] !== null && $service['price_max'] !== '' && (float)$service['price_max'] > 0);
                         $is_variant = ($service['pricing_type'] === 'variant');
                         $variants = $is_variant ? ($service_variants_map[$service['id']] ?? []) : [];
                     ?>
                         <div class="service-item-wrapper">
                             <label>
-                                <input type="checkbox" name="service_ids[]" value="<?php echo $service['id']; ?>" class="service-checkbox" data-price="<?php echo $display_price; ?>" data-is-range="<?php echo $is_range ? '1' : '0'; ?>" data-is-variant="<?php echo $is_variant ? '1' : '0'; ?>" data-is-multiple="<?php echo ($service['is_multiple'] ?? 0) ? '1' : '0'; ?>" data-min="<?php echo $service['price_min'] ?: $display_price; ?>" data-max="<?php echo $service['price_max'] ?: $display_price; ?>" data-service-id="<?php echo $service['id']; ?>" onchange="updateTotalPrice()">
+                                <input type="checkbox" name="service_ids[]" value="<?php echo $service['id']; ?>" class="service-checkbox" data-price="<?php echo $display_price; ?>" data-is-range="<?php echo $is_range ? '1' : '0'; ?>" data-is-variant="<?php echo $is_variant ? '1' : '0'; ?>" data-is-multiple="<?php echo ($service['is_multiple'] ?? 0) ? '1' : '0'; ?>" data-min="<?php echo ($service['price_min'] !== null && $service['price_min'] !== '') ? $service['price_min'] : $display_price; ?>" data-max="<?php echo ($service['price_max'] !== null && $service['price_max'] !== '') ? $service['price_max'] : $display_price; ?>" data-service-id="<?php echo $service['id']; ?>" onchange="updateTotalPrice()">
                                 <?php echo htmlspecialchars($service['name']); ?> - <?php 
                                     if ($is_range) {
                                         echo formatPrice($service['price_min']) . ' - ' . formatPrice($service['price_max']);
@@ -1212,7 +1212,7 @@ include 'includes/header.php';
                             <?php if ($is_range): ?>
                             <div class="range-price-input" data-service-id="<?php echo $service['id']; ?>" style="display:none; margin-left:24px; margin-top:4px; align-items:center; gap:6px;">
                                 <span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span>
-                                <input type="number" class="range-actual-price form-control" data-service-id="<?php echo $service['id']; ?>" value="<?php echo intval($service['price_min']); ?>" min="<?php echo $service['price_min']; ?>" max="<?php echo $service['price_max']; ?>" step="any" style="width:100px; padding:4px 8px; font-size:0.85em; text-align:right;" onchange="updateTotalPrice()">
+                                <input type="number" class="range-actual-price form-control" data-service-id="<?php echo $service['id']; ?>" value="<?php echo htmlspecialchars((string)$service['price_min']); ?>" min="<?php echo $service['price_min']; ?>" max="<?php echo $service['price_max']; ?>" step="any" style="width:100px; padding:4px 8px; font-size:0.85em; text-align:right;" oninput="updateTotalPrice()" onchange="updateTotalPrice()">
                                 <span style="font-size:0.8em; color:#6b7280;">₺</span>
                             </div>
                             <?php endif; ?>
@@ -1320,14 +1320,14 @@ include 'includes/header.php';
                 <input type="text" class="form-control service-search-input" id="betweenServiceSearchInput" placeholder="Hizmet ara..." autocomplete="off">
                 <div class="services-selection" id="betweenServicesSelection">
                     <?php foreach($services as $service): 
-                        $display_price = ($service['pricing_type'] === 'range' && !empty($service['price_min'])) ? $service['price_min'] : $service['price'];
-                        $is_range = ($service['pricing_type'] === 'range' && !empty($service['price_min']) && !empty($service['price_max']));
+                        $display_price = ($service['pricing_type'] === 'range' && $service['price_min'] !== null && $service['price_min'] !== '') ? $service['price_min'] : $service['price'];
+                        $is_range = ($service['pricing_type'] === 'range' && $service['price_min'] !== null && $service['price_min'] !== '' && $service['price_max'] !== null && $service['price_max'] !== '' && (float)$service['price_max'] > 0);
                         $is_variant = ($service['pricing_type'] === 'variant');
                         $variants = $is_variant ? ($service_variants_map[$service['id']] ?? []) : [];
                     ?>
                         <div class="service-item-wrapper">
                             <label>
-                                <input type="checkbox" name="service_ids[]" value="<?php echo $service['id']; ?>" class="between-service-checkbox" data-price="<?php echo $display_price; ?>" data-is-range="<?php echo $is_range ? '1' : '0'; ?>" data-is-variant="<?php echo $is_variant ? '1' : '0'; ?>" data-is-multiple="<?php echo ($service['is_multiple'] ?? 0) ? '1' : '0'; ?>" data-min="<?php echo $service['price_min'] ?: $display_price; ?>" data-max="<?php echo $service['price_max'] ?: $display_price; ?>" data-service-id="<?php echo $service['id']; ?>" onchange="updateBetweenTotalPrice()">
+                                <input type="checkbox" name="service_ids[]" value="<?php echo $service['id']; ?>" class="between-service-checkbox" data-price="<?php echo $display_price; ?>" data-is-range="<?php echo $is_range ? '1' : '0'; ?>" data-is-variant="<?php echo $is_variant ? '1' : '0'; ?>" data-is-multiple="<?php echo ($service['is_multiple'] ?? 0) ? '1' : '0'; ?>" data-min="<?php echo ($service['price_min'] !== null && $service['price_min'] !== '') ? $service['price_min'] : $display_price; ?>" data-max="<?php echo ($service['price_max'] !== null && $service['price_max'] !== '') ? $service['price_max'] : $display_price; ?>" data-service-id="<?php echo $service['id']; ?>" onchange="updateBetweenTotalPrice()">
                                 <?php echo htmlspecialchars($service['name']); ?> - <?php 
                                     if ($is_range) {
                                         echo formatPrice($service['price_min']) . ' - ' . formatPrice($service['price_max']);
@@ -1341,7 +1341,7 @@ include 'includes/header.php';
                             <?php if ($is_range): ?>
                             <div class="range-price-input" data-service-id="<?php echo $service['id']; ?>" style="display:none; margin-left:24px; margin-top:4px; align-items:center; gap:6px;">
                                 <span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span>
-                                <input type="number" class="range-actual-price form-control" data-service-id="<?php echo $service['id']; ?>" value="<?php echo intval($service['price_min']); ?>" min="<?php echo $service['price_min']; ?>" max="<?php echo $service['price_max']; ?>" step="any" style="width:100px; padding:4px 8px; font-size:0.85em; text-align:right;" onchange="updateBetweenTotalPrice()">
+                                <input type="number" class="range-actual-price form-control" data-service-id="<?php echo $service['id']; ?>" value="<?php echo htmlspecialchars((string)$service['price_min']); ?>" min="<?php echo $service['price_min']; ?>" max="<?php echo $service['price_max']; ?>" step="any" style="width:100px; padding:4px 8px; font-size:0.85em; text-align:right;" oninput="updateBetweenTotalPrice()" onchange="updateBetweenTotalPrice()">
                                 <span style="font-size:0.8em; color:#6b7280;">₺</span>
                             </div>
                             <?php endif; ?>

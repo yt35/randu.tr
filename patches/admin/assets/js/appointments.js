@@ -1021,7 +1021,7 @@ function buildCompleteServiceList(container, services, selectedServiceIds, servi
             rangeInput.className = 'complete-range-price-input';
             rangeInput.dataset.serviceId = service.id;
             rangeInput.style.cssText = 'margin-left: 24px; margin-top: 4px; display: ' + (isChecked ? 'flex' : 'none') + '; align-items: center; gap: 6px;';
-            rangeInput.innerHTML = `<span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span><input type="number" class="complete-range-actual-price" data-service-id="${service.id}" value="${effectivePrice}" min="${service.price_min}" max="${service.price_max}" step="any" style="width:90px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; text-align:right;" onchange="updateCompletePrice()"><span style="font-size:0.8em; color:#6b7280;">TL</span>`;
+            rangeInput.innerHTML = `<span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span><input type="number" class="complete-range-actual-price" data-service-id="${service.id}" value="${effectivePrice}" min="${service.price_min}" max="${service.price_max}" step="any" style="width:90px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; text-align:right;" oninput="updateCompletePrice()" onchange="updateCompletePrice()"><span style="font-size:0.8em; color:#6b7280;">TL</span>`;
             wrapper.appendChild(rangeInput);
         }
         
@@ -1080,20 +1080,23 @@ function closeCompleteModal() {
 
 function updateCompletePrice() {
     let total = 0;
-    document.querySelectorAll('#completeServiceList .complete-service-checkbox:checked').forEach(checkbox => {
+    const serviceList = document.getElementById('completeServiceList');
+    if (!serviceList) return;
+    serviceList.querySelectorAll('.complete-service-checkbox:checked').forEach(checkbox => {
         if (checkbox.dataset.isRange === '1') {
-            const rangeInput = document.querySelector(`.complete-range-actual-price[data-service-id="${checkbox.dataset.id}"]`);
+            const rangeInput = serviceList.querySelector(`.complete-range-actual-price[data-service-id="${checkbox.dataset.id}"]`);
             total += rangeInput ? parseFloat(rangeInput.value) || 0 : parseFloat(checkbox.dataset.basePrice || checkbox.value);
         } else if (checkbox.dataset.isVariant === '1') {
             total += parseFloat(checkbox.dataset.basePrice || checkbox.value);
-            document.querySelectorAll(`#completeServiceList .complete-variant-panel[data-service-id="${checkbox.dataset.id}"] .complete-variant-input:checked`).forEach(v => {
+            serviceList.querySelectorAll(`.complete-variant-panel[data-service-id="${checkbox.dataset.id}"] .complete-variant-input:checked`).forEach(v => {
                 total += parseFloat(v.dataset.extraPrice || 0);
             });
         } else {
             total += parseFloat(checkbox.value);
         }
     });
-    document.getElementById('final_price').value = total.toFixed(2);
+    const finalEl = document.getElementById('final_price');
+    if (finalEl) finalEl.value = total.toFixed(2);
 }
 
 // ============================================================

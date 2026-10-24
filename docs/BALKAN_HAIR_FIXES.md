@@ -11,6 +11,7 @@ Canlıya (`/home/randu.tr/public_html/admin/`) deploy edildi. Bu repodaki `patch
 5. **Defter ödeme renkleri**: Alınmadı daha koyu kırmızı (`#b91c1c` pill); nakit sarı, havale pembe — geçmiş ile aynı dil.
 6. **Bekleme listesi B**: Tercih edilen saatte defter saat etiketi + dolu/boş kartlarda `B` (D/+ gibi); bekleme listesi satırında da B ve not.
 7. **Ürün barkod görünürlüğü**: Ürün kartına tıklanınca hızlı işlem modalında barkod varsa JsBarcode görseli + kod; düzenleme modalında da önizleme.
+8. **Aralıklı fiyat → toplam**: Tamamla/düzenle “Alınan tutar” yazılınca toplam güncellenmiyordu (create formundaki eski range input okunuyordu). Modal içinde scope + oninput; create toplamı `final_price` kalıntısından değil seçimden hesaplanıyor; `price_min=0` için PHP `!empty` kırığı düzeltildi.
 
 ## Deploy edilen dosyalar
 

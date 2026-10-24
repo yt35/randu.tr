@@ -1490,20 +1490,22 @@ function updateTotalPrice() {
         if (checkbox.checked) {
             if (checkbox.dataset.isRange === '1' && rangeDiv) {
                 const rangeInput = rangeDiv.querySelector('.range-actual-price');
-                total += parseFloat(rangeInput?.value || checkbox.dataset.price);
+                const raw = rangeInput ? rangeInput.value : '';
+                total += (raw !== '' && raw != null) ? (parseFloat(raw) || 0) : (parseFloat(checkbox.dataset.price) || 0);
             } else if (checkbox.dataset.isVariant === '1') {
-                total += parseFloat(checkbox.dataset.price);
+                total += parseFloat(checkbox.dataset.price) || 0;
                 if (variantPanel) {
                     variantPanel.querySelectorAll('.variant-input:checked').forEach(v => {
                         total += parseFloat(v.dataset.extraPrice || 0);
                     });
                 }
             } else {
-                total += parseFloat(checkbox.dataset.price);
+                total += parseFloat(checkbox.dataset.price) || 0;
             }
         }
     });
-    document.getElementById('totalPriceDisplay').textContent = `Toplam: ${formatTL(total)}`;
+    const display = document.getElementById('totalPriceDisplay');
+    if (display) display.textContent = `Toplam: ${formatTL(total)}`;
 }
 
 function updateBetweenTotalPrice() {
@@ -1524,20 +1526,22 @@ function updateBetweenTotalPrice() {
         if (checkbox.checked) {
             if (checkbox.dataset.isRange === '1' && rangeDiv) {
                 const rangeInput = rangeDiv.querySelector('.range-actual-price');
-                total += parseFloat(rangeInput?.value || checkbox.dataset.price);
+                const raw = rangeInput ? rangeInput.value : '';
+                total += (raw !== '' && raw != null) ? (parseFloat(raw) || 0) : (parseFloat(checkbox.dataset.price) || 0);
             } else if (checkbox.dataset.isVariant === '1') {
-                total += parseFloat(checkbox.dataset.price);
+                total += parseFloat(checkbox.dataset.price) || 0;
                 if (variantPanel) {
                     variantPanel.querySelectorAll('.variant-input:checked').forEach(v => {
                         total += parseFloat(v.dataset.extraPrice || 0);
                     });
                 }
             } else {
-                total += parseFloat(checkbox.dataset.price);
+                total += parseFloat(checkbox.dataset.price) || 0;
             }
         }
     });
-    document.getElementById('betweenTotalPriceDisplay').textContent = `Toplam: ${formatTL(total)}`;
+    const display = document.getElementById('betweenTotalPriceDisplay');
+    if (display) display.textContent = `Toplam: ${formatTL(total)}`;
 }
 
 // Müşteri SMS gönderim tercihini hatırla
@@ -2597,7 +2601,7 @@ function buildDailyCompleteServiceList(container, selectedServiceIds, detailMap)
             rangeInput.className = 'range-price-input';
             rangeInput.dataset.serviceId = service.id;
             rangeInput.style.cssText = 'margin-left: 24px; margin-top: 4px; display: ' + (isChecked ? 'flex' : 'none') + '; align-items: center; gap: 6px;';
-            rangeInput.innerHTML = `<span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span><input type="number" class="range-actual-price" data-service-id="${service.id}" value="${effectivePrice}" min="${service.price_min}" max="${service.price_max}" step="any" style="width:90px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; text-align:right;" onchange="updateFinalPrice()"><span style="font-size:0.8em; color:#6b7280;">TL</span>`;
+            rangeInput.innerHTML = `<span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span><input type="number" class="range-actual-price" data-service-id="${service.id}" value="${effectivePrice}" min="${service.price_min}" max="${service.price_max}" step="any" style="width:90px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; text-align:right;" oninput="updateFinalPrice()" onchange="updateFinalPrice()"><span style="font-size:0.8em; color:#6b7280;">TL</span>`;
             wrapper.appendChild(rangeInput);
         }
         
@@ -2738,7 +2742,7 @@ function buildDailyEditServiceList(container, selectedServiceIds, detailMap) {
             rangeInput.className = 'edit-range-price-input';
             rangeInput.dataset.serviceId = service.id;
             rangeInput.style.cssText = 'margin-left: 24px; margin-top: 4px; display: ' + (isChecked ? 'flex' : 'none') + '; align-items: center; gap: 6px;';
-            rangeInput.innerHTML = `<span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span><input type="number" class="edit-range-actual-price" data-service-id="${service.id}" value="${effectivePrice}" min="${service.price_min}" max="${service.price_max}" step="any" style="width:90px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; text-align:right;" onchange="updateEditFinalPrice()"><span style="font-size:0.8em; color:#6b7280;">TL</span>`;
+            rangeInput.innerHTML = `<span style="font-size:0.8em; color:#6b7280;">Alınan tutar:</span><input type="number" class="edit-range-actual-price" data-service-id="${service.id}" value="${effectivePrice}" min="${service.price_min}" max="${service.price_max}" step="any" style="width:90px; padding:4px 8px; border:1px solid #d1d5db; border-radius:6px; font-size:0.85em; text-align:right;" oninput="updateEditFinalPrice()" onchange="updateEditFinalPrice()"><span style="font-size:0.8em; color:#6b7280;">TL</span>`;
             wrapper.appendChild(rangeInput);
         }
         
@@ -2773,38 +2777,66 @@ function buildDailyEditServiceList(container, selectedServiceIds, detailMap) {
 
 function updateFinalPrice() {
     let total = 0;
-    document.querySelectorAll('#serviceList .service-checkbox:checked').forEach(checkbox => {
+    const serviceList = document.getElementById('serviceList');
+    if (!serviceList) return;
+    serviceList.querySelectorAll('.service-checkbox:checked').forEach(checkbox => {
         if (checkbox.dataset.isRange === '1') {
-            const rangeInput = document.querySelector(`.range-actual-price[data-service-id="${checkbox.dataset.id}"]`);
+            const rangeInput = serviceList.querySelector(`.range-actual-price[data-service-id="${checkbox.dataset.id}"]`);
             total += rangeInput ? parseFloat(rangeInput.value) || 0 : parseFloat(checkbox.dataset.basePrice || checkbox.value);
         } else if (checkbox.dataset.isVariant === '1') {
             total += parseFloat(checkbox.dataset.basePrice || checkbox.value);
-            document.querySelectorAll(`#serviceList .complete-variant-panel[data-service-id="${checkbox.dataset.id}"] .complete-variant-input:checked`).forEach(v => {
+            serviceList.querySelectorAll(`.complete-variant-panel[data-service-id="${checkbox.dataset.id}"] .complete-variant-input:checked`).forEach(v => {
                 total += parseFloat(v.dataset.extraPrice || 0);
             });
         } else {
             total += parseFloat(checkbox.value);
         }
     });
-    document.getElementById('final_price').value = total.toFixed(2);
+    const finalEl = document.getElementById('final_price');
+    if (finalEl) finalEl.value = total.toFixed(2);
 }
 
 function updateEditFinalPrice() {
     let total = 0;
-    document.querySelectorAll('#editServiceList .edit-service-checkbox:checked').forEach(checkbox => {
+    const editList = document.getElementById('editServiceList');
+    if (!editList) return;
+    editList.querySelectorAll('.edit-service-checkbox:checked').forEach(checkbox => {
         if (checkbox.dataset.isRange === '1') {
-            const rangeInput = document.querySelector(`.edit-range-actual-price[data-service-id="${checkbox.dataset.id}"]`);
+            const rangeInput = editList.querySelector(`.edit-range-actual-price[data-service-id="${checkbox.dataset.id}"]`);
             total += rangeInput ? parseFloat(rangeInput.value) || 0 : parseFloat(checkbox.dataset.basePrice || checkbox.value);
         } else if (checkbox.dataset.isVariant === '1') {
             total += parseFloat(checkbox.dataset.basePrice || checkbox.value);
-            document.querySelectorAll(`#editServiceList .edit-variant-panel[data-service-id="${checkbox.dataset.id}"] .edit-variant-input:checked`).forEach(v => {
+            editList.querySelectorAll(`.edit-variant-panel[data-service-id="${checkbox.dataset.id}"] .edit-variant-input:checked`).forEach(v => {
                 total += parseFloat(v.dataset.extraPrice || 0);
             });
         } else {
             total += parseFloat(checkbox.value);
         }
     });
-    document.getElementById('edit_final_price').value = total.toFixed(2);
+    const editFinalEl = document.getElementById('edit_final_price');
+    if (editFinalEl) editFinalEl.value = total.toFixed(2);
+}
+
+/** Seçili hizmetlerden toplamı hesapla (create/between — complete modal final_price'ına dokunma) */
+function computeServicesTotalFromSelection(rootEl) {
+    if (!rootEl) return NaN;
+    let total = 0;
+    rootEl.querySelectorAll('.service-checkbox:checked, .between-service-checkbox:checked').forEach(checkbox => {
+        const wrapper = checkbox.closest('.service-item-wrapper');
+        if (checkbox.dataset.isRange === '1') {
+            const rangeInput = wrapper?.querySelector('.range-actual-price');
+            const raw = rangeInput ? rangeInput.value : '';
+            total += (raw !== '' && raw != null) ? (parseFloat(raw) || 0) : (parseFloat(checkbox.dataset.price || 0) || 0);
+        } else if (checkbox.dataset.isVariant === '1') {
+            total += parseFloat(checkbox.dataset.price || checkbox.value || 0) || 0;
+            wrapper?.querySelectorAll('.variant-input:checked').forEach(v => {
+                total += parseFloat(v.dataset.extraPrice || 0) || 0;
+            });
+        } else {
+            total += parseFloat(checkbox.dataset.price || checkbox.value || 0) || 0;
+        }
+    });
+    return total;
 }
 
 // Onay modalı
@@ -2944,8 +2976,8 @@ async function submitAppointmentForm() {
     try {
         const apptId = parseInt(document.getElementById('appointment_id')?.value || '0', 10);
 
-        const formTotalEl = document.getElementById('totalPrice') || document.getElementById('final_price') || form.querySelector('[name="total_price"], #appointment_total_price');
-        const formTotalPrice = formTotalEl ? parseFloat(formTotalEl.value || formTotalEl.textContent) : NaN;
+        // Complete modal'daki final_price'ı kullanma — seçilen hizmetlerden hesapla
+        const formTotalPrice = computeServicesTotalFromSelection(document.getElementById('servicesSelection') || form);
 
         let result;
         if (formAction === 'update' && apptId > 0) {
@@ -3100,8 +3132,7 @@ async function submitBetweenAppointmentForm() {
     });
     
     try {
-        const betweenTotalEl = document.getElementById('between_total_price') || form.querySelector('[name="total_price"]');
-        const betweenTotalPrice = betweenTotalEl ? parseFloat(betweenTotalEl.value) : null;
+        const betweenTotalPrice = computeServicesTotalFromSelection(document.getElementById('betweenServicesSelection') || form);
         const result = await apiRequest('api/daily_view/create.php', 'POST', {
             appointment_date: form.between_appointment_date.value,
             appointment_time: form.between_appointment_time.value,
@@ -4222,6 +4253,9 @@ window.fillCustomerInfo = fillCustomerInfo;
 window.fillBetweenCustomerInfo = fillBetweenCustomerInfo;
 window.updateTotalPrice = updateTotalPrice;
 window.updateBetweenTotalPrice = updateBetweenTotalPrice;
+window.updateFinalPrice = updateFinalPrice;
+window.updateEditFinalPrice = updateEditFinalPrice;
+window.computeServicesTotalFromSelection = computeServicesTotalFromSelection;
 window.setPaymentMethodAndSubmit = setPaymentMethodAndSubmit;
 window.setEditPaymentMethodAndSubmit = setEditPaymentMethodAndSubmit;
 window.confirmExistingCustomer = confirmExistingCustomer;
